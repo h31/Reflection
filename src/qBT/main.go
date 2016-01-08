@@ -15,11 +15,11 @@ func check(e error) {
 }
 
 type Connection struct {
-	Addr string
+	Addr    string
 	// Hash to ID map. Array index is an ID
 	HashIds []string
-	Tr *http.Transport
-	Client *http.Client
+	Tr      *http.Transport
+	Client  *http.Client
 }
 
 func (q *Connection) MakeRequestURLWithParam(path string, params map[string]string) string {
@@ -97,7 +97,7 @@ func (q *Connection) DoPOST(path string, contentType string, body io.Reader) []b
 }
 
 func (q *Connection) GetHashForId(id int) string {
-	return q.HashIds[id-1]
+	return q.HashIds[id - 1]
 }
 
 func (q *Connection) GetHashNum() int {

@@ -15,7 +15,7 @@ var SessionGetBase = JsonMap{
 	"config-dir": "/var/lib/transmission-daemon",
 	"dht-enabled": true,
 	"download-dir": "/var/lib/transmission-daemon/downloads",
-	"download-dir-free-space": float64(100*(1 << 30)), // 100 GB
+	"download-dir-free-space": float64(100 * (1 << 30)), // 100 GB
 	"download-queue-enabled": true,
 	"download-queue-size": 5,
 	"encryption": "preferred",
@@ -80,8 +80,8 @@ var TorrentGetBase = JsonMap{
 	"peersGettingFromUs": 0,
 	"peersSendingToUs": 0,
 	"pieces": "///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w",
-	"downloadedEver": 1*(1 << 30), // 1 GB,
-	"uploadedEver": 1*(1 << 30), // 1 GB,
+	"downloadedEver": 1 * (1 << 30), // 1 GB,
+	"uploadedEver": 1 * (1 << 30), // 1 GB,
 	"error": 0, // TR_STAT_OK
 	"isFinished": false,
 	"isStalled": false,
@@ -133,16 +133,16 @@ var trackerStatsTemplate = JsonMap{
 	"seederCount": -1,
 }
 
-var SessionStatsTemplate = JsonMap {
+var SessionStatsTemplate = JsonMap{
 	"activeTorrentCount": 0,
-	"cumulative-stats": map[string]int64 {
+	"cumulative-stats": map[string]int64{
 		"downloadedBytes": 388802690736,
 		"filesAdded": 5611,
 		"secondsActive": 15681693897,
 		"sessionCount": 57,
 		"uploadedBytes": 1950265820985,
 	},
-	"current-stats": map[string]int64 {
+	"current-stats": map[string]int64{
 		"downloadedBytes": 9939147143,
 		"filesAdded": 13,
 		"secondsActive": 99633,

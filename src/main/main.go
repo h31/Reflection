@@ -7,10 +7,10 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"net/url"
 	"strconv"
-    "encoding/base64"
-    "mime/multipart"
+	"encoding/base64"
+	"mime/multipart"
 	"bytes"
-    "crypto/sha1"
+	"crypto/sha1"
 	"fmt"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"transmission"
@@ -21,11 +21,11 @@ import (
 
 var (
 	verbose = kingpin.Flag("verbose", "Enable debug output").Short('v').Bool()
-	apiAddr    = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
+	apiAddr = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
 	port = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
 )
 
-var deprecatedFields = []string {
+var deprecatedFields = []string{
 	"announceResponse",
 	"seeders",
 	"leechers",
@@ -50,7 +50,7 @@ func parseIDsArgument(args *json.RawMessage) []int {
 		log.Debug("No IDs provided")
 		result := make([]int, qBTConn.GetHashNum())
 		for i := 0; i < qBTConn.GetHashNum(); i++ {
-			result[i] = i+1
+			result[i] = i + 1
 		}
 		return result
 	}
@@ -61,7 +61,7 @@ func parseIDsArgument(args *json.RawMessage) []int {
 
 	if ids_num, ids_num_ok := ids.(float64); ids_num_ok {
 		log.Debug("Query a single ID")
-		return []int {int(ids_num)}
+		return []int{int(ids_num)}
 	} else if ids_list, ids_list_ok := ids.([]interface{}); ids_list_ok {
 		log.Debug("Query an ID list of length ", len(ids_list))
 		result := make([]int, len(ids_list))
@@ -78,12 +78,12 @@ func parseIDsArgument(args *json.RawMessage) []int {
 		log.Debug("Query recently-active") // TODO
 		result := make([]int, qBTConn.GetHashNum())
 		for i := 0; i < qBTConn.GetHashNum(); i++ {
-			result[i] = i+1
+			result[i] = i + 1
 		}
 		return result
 	} else {
 		log.Error("Unknown action")
-		return []int {}
+		return []int{}
 	}
 }
 
@@ -137,12 +137,12 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	default:
 		dst["status"] = 0 // TR_STATUS_STOPPED
 	}
-	dst["leftUntilDone"] = float64(src.Size)*(1-src.Progress)
-	dst["desiredAvailable"] = float64(src.Size)*(1-src.Progress) // TODO
+	dst["leftUntilDone"] = float64(src.Size) * (1 - src.Progress)
+	dst["desiredAvailable"] = float64(src.Size) * (1 - src.Progress) // TODO
 	dst["haveUnchecked"] = 0 // TODO
 }
 
-func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral)  {
+func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["downloadDir"] = propGeneral.Save_path
 	dst["pieceSize"] = propGeneral.Piece_size
 	dst["pieceCount"] = propGeneral.Pieces_num
@@ -155,12 +155,12 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral)  {
 	dst["downloadLimit"] = propGeneral.Dl_limit; // TODO: Kb/s?
 	dst["uploadLimit"] = propGeneral.Up_limit
 	dst["totalSize"] = propGeneral.Total_size
-	dst["haveValid"] = propGeneral.Piece_size*propGeneral.Pieces_num
+	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_num
 	dst["downloadedEver"] = propGeneral.Total_downloaded
 	dst["uploadedEver"] = propGeneral.Total_uploaded
 }
 
-func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers)  {
+func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 	trackersList := make([]JsonMap, len(trackers))
 	trackerStats := make([]JsonMap, len(trackers))
 
@@ -185,7 +185,7 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers)  {
 	dst["trackerStats"] = trackerStats
 }
 
-func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles)  {
+func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 	fileNum := len(filesInfo)
 	files := make([]JsonMap, fileNum)
 	fileStats := make([]JsonMap, fileNum)
@@ -195,11 +195,11 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles)  {
 		files[i] = make(JsonMap)
 		fileStats[i] = make(JsonMap)
 
-		files[i]["bytesCompleted"] = float64(value.Size)*value.Progress
+		files[i]["bytesCompleted"] = float64(value.Size) * value.Progress
 		files[i]["length"] = value.Size
 		files[i]["name"] = value.Name
 
-		fileStats[i]["bytesCompleted"] = float64(value.Size)*value.Progress
+		fileStats[i]["bytesCompleted"] = float64(value.Size) * value.Progress
 		if value.Priority == 0 {
 			fileStats[i]["wanted"] = false
 			wanted[i] = 0
@@ -280,7 +280,7 @@ func FreeSpace(args json.RawMessage) (JsonMap, string) {
 
 	return JsonMap{
 		"path": path,
-		"size-bytes": float64(100*(1 << 30)), // 100 GB
+		"size-bytes": float64(100 * (1 << 30)), // 100 GB
 	}, "success"
 }
 
@@ -319,19 +319,6 @@ func TorrentRecheck(args json.RawMessage) (JsonMap, string) {
 			url.Values{"hash": {hash}})
 	}
 	return JsonMap{}, "success"
-}
-
-func CompareHashArrays(oldHashes, newHashes []string) (int, string) {
-	oldHashesLen := len(oldHashes)
-	for i := range newHashes {
-		if (i >= oldHashesLen) {
-			return i, newHashes[i]
-		} else if (oldHashes[i] != newHashes[i]) {
-			return i, newHashes[i]
-		}
-	}
-	log.Error("No new hashes found")
-	return 0, newHashes[0] // TODO
 }
 
 func TorrentAdd(args json.RawMessage) (JsonMap, string) {
@@ -471,7 +458,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	case req.Method == "torrent-add":
 		resp, result = TorrentAdd(req.Arguments)
 	}
-	response := JsonMap {
+	response := JsonMap{
 		"result": result,
 		"arguments": resp,
 	}

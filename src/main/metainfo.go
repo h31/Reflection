@@ -21,14 +21,14 @@ type InfoDict struct {
 	FileDuration []int64 "file-duration"
 	FileMedia    []int64 "file-media"
 	// Single file
-	Name   string "name"
-	Length int64  "length"
-	Md5sum string "md5sum"
+	Name         string "name"
+	Length       int64  "length"
+	Md5sum       string "md5sum"
 	// Multiple files
-	Files       []FileDict "files"
-	PieceLength int64      "piece length"
-	Pieces      string     "pieces"
-	Private     int64      "private"
+	Files        []FileDict "files"
+	PieceLength  int64      "piece length"
+	Pieces       string     "pieces"
+	Private      int64      "private"
 }
 
 type MetaInfo struct {
@@ -119,7 +119,7 @@ func (metaInfo *MetaInfo) DumpTorrentMetaInfo() {
 	fmt.Println("Info:")
 	fmt.Println("    Piece Length:", metaInfo.Info.PieceLength)
 	piecesList := metaInfo.getPiecesList()
-	fmt.Printf("    Pieces:%X -- %X\n", len(piecesList), len(metaInfo.Info.Pieces)/20)
+	fmt.Printf("    Pieces:%X -- %X\n", len(piecesList), len(metaInfo.Info.Pieces) / 20)
 	fmt.Println("    File Duration:", metaInfo.Info.FileDuration)
 	fmt.Println("    File Media:", metaInfo.Info.FileMedia)
 	fmt.Println("    Private:", metaInfo.Info.Private)
@@ -138,8 +138,8 @@ func (metaInfo *MetaInfo) DumpTorrentMetaInfo() {
 func (metaInfo *MetaInfo) getPiecesList() []string {
 	var piecesList []string
 	piecesLen := len(metaInfo.Info.Pieces)
-	for i, j := 0, 0; i < piecesLen; i, j = i+20, j+1 {
-		piecesList = append(piecesList, metaInfo.Info.Pieces[i:i+19])
+	for i, j := 0, 0; i < piecesLen; i, j = i + 20, j + 1 {
+		piecesList = append(piecesList, metaInfo.Info.Pieces[i:i + 19])
 	}
 	return piecesList
 }
