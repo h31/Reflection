@@ -1,11 +1,12 @@
 package qBT
+
 import (
-	"net/url"
-	"io/ioutil"
-	"net/http"
-	"io"
 	"encoding/json"
 	log "github.com/Sirupsen/logrus"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 )
 
 func check(e error) {
@@ -15,7 +16,7 @@ func check(e error) {
 }
 
 type Connection struct {
-	Addr    string
+	Addr string
 	// Hash to ID map. Array index is an ID
 	HashIds []string
 	Tr      *http.Transport
@@ -97,17 +98,16 @@ func (q *Connection) DoPOST(path string, contentType string, body io.Reader) []b
 }
 
 func (q *Connection) GetHashForId(id int) string {
-	return q.HashIds[id - 1]
+	return q.HashIds[id-1]
 }
 
 func (q *Connection) GetHashNum() int {
 	return len(q.HashIds)
 }
 
-
 func FindInArray(array []string, item string) bool {
 	for _, value := range array {
-		if (value == item) {
+		if value == item {
 			return true
 		}
 	}
@@ -115,7 +115,7 @@ func FindInArray(array []string, item string) bool {
 }
 
 func (q *Connection) FillIDs(torrentsList []TorrentsList) {
-	if (len(q.HashIds) > 0) {
+	if len(q.HashIds) > 0 {
 		// HashIDs already filled
 		for _, torrent := range torrentsList {
 			if FindInArray(q.HashIds, torrent.Hash) == false {

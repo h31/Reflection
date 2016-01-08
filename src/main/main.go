@@ -1,28 +1,28 @@
 package main
 
 import (
-	"net/http"
-	"encoding/json"
-	"io/ioutil"
-	log "github.com/Sirupsen/logrus"
-	"net/url"
-	"strconv"
-	"encoding/base64"
-	"mime/multipart"
 	"bytes"
 	"crypto/sha1"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"transmission"
+	"io/ioutil"
+	"mime/multipart"
+	"net/http"
+	"net/url"
 	"qBT"
-	"time"
+	"strconv"
 	"strings"
+	"time"
+	"transmission"
 )
 
 var (
 	verbose = kingpin.Flag("verbose", "Enable debug output").Short('v').Bool()
 	apiAddr = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
-	port = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
+	port    = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
 )
 
 var deprecatedFields = []string{
@@ -46,7 +46,7 @@ func IsFieldDeprecated(field string) bool {
 }
 
 func parseIDsArgument(args *json.RawMessage) []int {
-	if (args == nil) {
+	if args == nil {
 		log.Debug("No IDs provided")
 		result := make([]int, qBTConn.GetHashNum())
 		for i := 0; i < qBTConn.GetHashNum(); i++ {
@@ -67,7 +67,7 @@ func parseIDsArgument(args *json.RawMessage) []int {
 		result := make([]int, len(ids_list))
 		for i, value := range ids_list {
 			id, id_ok := value.(float64)
-			if (id_ok) {
+			if id_ok {
 				result[i] = int(id)
 			} else {
 				log.Error("Hashes as IDs are not supported")
@@ -87,7 +87,7 @@ func parseIDsArgument(args *json.RawMessage) []int {
 	}
 }
 
-func parseActionArgument(args json.RawMessage) ([]string) {
+func parseActionArgument(args json.RawMessage) []string {
 	var req struct {
 		Ids json.RawMessage
 	}
@@ -105,7 +105,7 @@ func parseActionArgument(args json.RawMessage) ([]string) {
 func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	var src qBT.TorrentsList
 	for _, value := range torrentsList {
-		if (value.Hash == qBTConn.GetHashForId(id)) {
+		if value.Hash == qBTConn.GetHashForId(id) {
 			src = value
 		}
 	}
@@ -115,7 +115,7 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	}
 	dst["hashString"] = src.Hash
 	dst["name"] = src.Name
-	dst["recheckProgress"] = src.Progress;
+	dst["recheckProgress"] = src.Progress
 	dst["sizeWhenDone"] = src.Size
 	dst["rateDownload"] = src.Dlspeed
 	dst["rateUpload"] = src.Upspeed
@@ -139,7 +139,7 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	}
 	dst["leftUntilDone"] = float64(src.Size) * (1 - src.Progress)
 	dst["desiredAvailable"] = float64(src.Size) * (1 - src.Progress) // TODO
-	dst["haveUnchecked"] = 0 // TODO
+	dst["haveUnchecked"] = 0                                         // TODO
 }
 
 func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
@@ -152,7 +152,7 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["dateCreated"] = propGeneral.Creation_date
 	dst["creator"] = propGeneral.Created_by
 	dst["doneDate"] = propGeneral.Completion_date
-	dst["downloadLimit"] = propGeneral.Dl_limit; // TODO: Kb/s?
+	dst["downloadLimit"] = propGeneral.Dl_limit // TODO: Kb/s?
 	dst["uploadLimit"] = propGeneral.Up_limit
 	dst["totalSize"] = propGeneral.Total_size
 	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_num
@@ -208,7 +208,7 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 			wanted[i] = 1
 		}
 		fileStats[i]["priority"] = 0 // TODO
-		priorities[i] = 0 // TODO
+		priorities[i] = 0            // TODO
 	}
 
 	dst["files"] = files
@@ -282,7 +282,7 @@ func FreeSpace(args json.RawMessage) (JsonMap, string) {
 	path := req["path"]
 
 	return JsonMap{
-		"path": path,
+		"path":       path,
 		"size-bytes": float64(100 * (1 << 30)), // 100 GB
 	}, "success"
 }
@@ -341,12 +341,12 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	var newName string
 	var newId int
 
-	if (req.Metainfo != nil) {
+	if req.Metainfo != nil {
 		log.Debug("Upload torrent using metainfo")
 
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
 		log.WithFields(log.Fields{
-			"len": len(metainfo),
+			"len":  len(metainfo),
 			"sha1": fmt.Sprintf("%x\n", sha1.Sum(metainfo)),
 		}).Debug("Decoded metainfo")
 
@@ -368,7 +368,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 
 	} else if req.Filename != nil {
 		path := *req.Filename
-		if (strings.HasPrefix(path, "magnet:?")) {
+		if strings.HasPrefix(path, "magnet:?") {
 			path = strings.TrimPrefix(path, "magnet:?")
 			params, err := url.ParseQuery(path)
 			log.WithFields(log.Fields{
@@ -388,7 +388,8 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 			url.Values{"urls": {*req.Filename}})
 	}
 
-	OuterLoop: for retries := 0; retries < 100; retries++ {
+OuterLoop:
+	for retries := 0; retries < 100; retries++ {
 		torrentList := qBTConn.GetTorrentList()
 		qBTConn.FillIDs(torrentList)
 
@@ -429,8 +430,8 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 
 	return JsonMap{
 		"torrent-added": JsonMap{
-			"id": newId,
-			"name": newName,
+			"id":         newId,
+			"name":       newName,
 			"hashString": newHash,
 		},
 	}, "success"
@@ -466,7 +467,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		resp, result = TorrentAdd(req.Arguments)
 	}
 	response := JsonMap{
-		"result": result,
+		"result":    result,
 		"arguments": resp,
 	}
 	if req.Tag != nil {

@@ -1,4 +1,5 @@
 package transmission
+
 import "encoding/json"
 
 type RPCRequest struct {
