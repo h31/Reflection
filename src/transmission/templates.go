@@ -1,4 +1,6 @@
-package main
+package transmission
+
+type JsonMap map[string]interface{}
 
 var SessionGetBase = JsonMap{
 	"alt-speed-down": 50,
@@ -108,7 +110,7 @@ var TorrentGetBase = JsonMap{
 	"peers" : []string{},
 }
 
-var trackerStatsTemplate = JsonMap{
+var TrackerStatsTemplate = JsonMap{
 	"announceState": 0,
 	"downloadCount": -1,
 	"hasAnnounced": false,

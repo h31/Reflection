@@ -1,8 +1,6 @@
 package transmission
 import "encoding/json"
 
-type JsonMap map[string]interface{}
-
 type RPCRequest struct {
 	Method    string
 	Tag       *int

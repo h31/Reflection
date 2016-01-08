@@ -110,7 +110,7 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 		}
 	}
 
-	for key, value := range TorrentGetBase {
+	for key, value := range transmission.TorrentGetBase {
 		dst[key] = value
 	}
 	dst["hashString"] = src.Hash
@@ -172,7 +172,7 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 		trackersList[i]["tier"] = 0 // TODO
 
 		trackerStats[i] = make(JsonMap)
-		for key, value := range trackerStatsTemplate {
+		for key, value := range transmission.TrackerStatsTemplate {
 			trackerStats[i][key] = value
 		}
 		trackerStats[i]["announce"] = value.Url
@@ -264,11 +264,14 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 }
 
 func SessionGet() (JsonMap, string) {
-	session := SessionGetBase
+	session := make(JsonMap)
+	for key, value := range transmission.SessionGetBase {
+		session[key] = value
+	}
 
 	version := qBTConn.GetVersion()
 	session["version"] = "2.84 (really qBT " + string(version) + ")"
-	return SessionGetBase, "success"
+	return session, "success"
 }
 
 func FreeSpace(args json.RawMessage) (JsonMap, string) {
@@ -285,7 +288,11 @@ func FreeSpace(args json.RawMessage) (JsonMap, string) {
 }
 
 func SessionStats() (JsonMap, string) {
-	return SessionStatsTemplate, "success"
+	session := make(JsonMap)
+	for key, value := range transmission.SessionGetBase {
+		session[key] = value
+	}
+	return session, "success"
 }
 
 func TorrentPause(args json.RawMessage) (JsonMap, string) {
