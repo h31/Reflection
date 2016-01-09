@@ -67,6 +67,15 @@ func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
 	return
 }
 
+func (q *Connection) GetPreferences() (pref Preferences) {
+	prefURL := q.MakeRequestURL("/query/preferences")
+	prefRaw := q.DoGET(prefURL)
+
+	err := json.Unmarshal(prefRaw, &pref)
+	check(err)
+	return
+}
+
 func (q *Connection) GetVersion() string {
 	versionURL := q.MakeRequestURL("/version/qbittorrent")
 	return string(q.DoGET(versionURL))
@@ -105,6 +114,16 @@ func (q *Connection) GetHashNum() int {
 	return len(q.HashIds)
 }
 
+func (q *Connection) GetIdOfHash(hash string) int {
+	for index, value := range q.HashIds {
+		if value == hash {
+			return index+1
+		}
+	}
+	return 0 // TODO
+}
+
+
 func FindInArray(array []string, item string) bool {
 	for _, value := range array {
 		if value == item {
@@ -114,12 +133,13 @@ func FindInArray(array []string, item string) bool {
 	return false
 }
 
-func (q *Connection) FillIDs(torrentsList []TorrentsList) {
+func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
 	if len(q.HashIds) > 0 {
 		// HashIDs already filled
 		for _, torrent := range torrentsList {
 			if FindInArray(q.HashIds, torrent.Hash) == false {
 				log.Debug("Received new hash ", torrent.Hash)
+				newHashes = append(newHashes, torrent.Hash)
 				q.HashIds = append(q.HashIds, torrent.Hash)
 			}
 		}
@@ -130,4 +150,5 @@ func (q *Connection) FillIDs(torrentsList []TorrentsList) {
 			q.HashIds[key] = value.Hash
 		}
 	}
+	return
 }

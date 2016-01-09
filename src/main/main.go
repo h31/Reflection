@@ -9,6 +9,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"io/ioutil"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -46,6 +47,17 @@ func IsFieldDeprecated(field string) bool {
 }
 
 func parseIDsArgument(args *json.RawMessage) []int {
+	allIds := parseIDsField(args)
+	filtered := make([]int, 0)
+	for _, id := range allIds {
+		if qBTConn.GetHashForId(id) != "" {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
+}
+
+func parseIDsField(args *json.RawMessage) []int {
 	if args == nil {
 		log.Debug("No IDs provided")
 		result := make([]int, qBTConn.GetHashNum())
@@ -59,29 +71,30 @@ func parseIDsArgument(args *json.RawMessage) []int {
 	err := json.Unmarshal(*args, &ids)
 	Check(err)
 
-	if ids_num, ids_num_ok := ids.(float64); ids_num_ok {
+	switch ids := ids.(type) {
+	case float64:
 		log.Debug("Query a single ID")
-		return []int{int(ids_num)}
-	} else if ids_list, ids_list_ok := ids.([]interface{}); ids_list_ok {
-		log.Debug("Query an ID list of length ", len(ids_list))
-		result := make([]int, len(ids_list))
-		for i, value := range ids_list {
-			id, id_ok := value.(float64)
-			if id_ok {
+		return []int{int(ids)}
+	case []interface{}:
+		log.Debug("Query an ID list of length ", len(ids))
+		result := make([]int, len(ids))
+		for i, value := range ids {
+			switch id := value.(type) {
+			case float64:
 				result[i] = int(id)
-			} else {
-				log.Error("Hashes as IDs are not supported")
+			case string:
+				result[i] = qBTConn.GetIdOfHash(id)
 			}
 		}
 		return result
-	} else if _, ids_string_ok := ids.(string); ids_string_ok {
+	case string:
 		log.Debug("Query recently-active") // TODO
 		result := make([]int, qBTConn.GetHashNum())
 		for i := 0; i < qBTConn.GetHashNum(); i++ {
 			result[i] = i + 1
 		}
 		return result
-	} else {
+	default:
 		log.Error("Unknown action")
 		return []int{}
 	}
@@ -142,6 +155,21 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["haveUnchecked"] = 0                                         // TODO
 }
 
+func MakePiecesBitArray(total, have uint) string {
+	arrLen := uint(math.Ceil(float64(total) / 8))
+	arr := make([]byte, arrLen)
+
+	fullBytes := uint(math.Floor(float64(have) / 8))
+	for i := uint(0); i < fullBytes; i++ {
+		arr[i] = math.MaxUint8
+	}
+	for i := uint(0); i < (have - fullBytes*8); i++ {
+		arr[fullBytes] |= 128 >> i
+	}
+
+	return base64.StdEncoding.EncodeToString(arr)
+}
+
 func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["downloadDir"] = propGeneral.Save_path
 	dst["pieceSize"] = propGeneral.Piece_size
@@ -155,9 +183,11 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["downloadLimit"] = propGeneral.Dl_limit // TODO: Kb/s?
 	dst["uploadLimit"] = propGeneral.Up_limit
 	dst["totalSize"] = propGeneral.Total_size
-	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_num
+	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_have
 	dst["downloadedEver"] = propGeneral.Total_downloaded
 	dst["uploadedEver"] = propGeneral.Total_uploaded
+	dst["pieces"] = MakePiecesBitArray(uint(propGeneral.Pieces_num),
+		uint(propGeneral.Pieces_have))
 }
 
 func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
@@ -269,6 +299,9 @@ func SessionGet() (JsonMap, string) {
 		session[key] = value
 	}
 
+	prefs := qBTConn.GetPreferences()
+	session["download-dir"] = prefs.Save_path
+
 	version := qBTConn.GetVersion()
 	session["version"] = "2.84 (really qBT " + string(version) + ")"
 	return session, "success"
@@ -289,7 +322,7 @@ func FreeSpace(args json.RawMessage) (JsonMap, string) {
 
 func SessionStats() (JsonMap, string) {
 	session := make(JsonMap)
-	for key, value := range transmission.SessionGetBase {
+	for key, value := range transmission.SessionStatsTemplate {
 		session[key] = value
 	}
 	return session, "success"
@@ -328,6 +361,44 @@ func TorrentRecheck(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success"
 }
 
+func TorrentDelete(args json.RawMessage) (JsonMap, string) {
+	var req struct {
+		Ids               json.RawMessage
+		Delete_local_data interface{} `json:"delete-local-data"`
+	}
+	err := json.Unmarshal(args, &req)
+	Check(err)
+
+	ids := parseIDsArgument(&req.Ids)
+	hashes := make([]string, len(ids))
+	for i, value := range ids {
+		hashes[i] = qBTConn.GetHashForId(value)
+		qBTConn.HashIds[value-1] = ""
+	}
+
+	joinedHashes := strings.Join(hashes, "|")
+
+	var deleteFiles bool // TODO: Move to a function
+	switch val := req.Delete_local_data.(type) {
+	case bool:
+		deleteFiles = val
+	case float64:
+		deleteFiles = (val != 0)
+	}
+
+	if deleteFiles {
+		log.Debug("Remove with files ", joinedHashes)
+		http.PostForm(qBTConn.MakeRequestURL("/command/deletePerm"),
+			url.Values{"hashes": {joinedHashes}})
+	} else {
+		log.Debug("Remove ", joinedHashes)
+		http.PostForm(qBTConn.MakeRequestURL("/command/delete"),
+			url.Values{"hashes": {joinedHashes}})
+	}
+
+	return JsonMap{}, "success"
+}
+
 func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	var req transmission.TorrentAddRequest
 	err := json.Unmarshal(args, &req)
@@ -335,7 +406,6 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 
 	torrentList := qBTConn.GetTorrentList()
 	qBTConn.FillIDs(torrentList)
-	oldHashNum := qBTConn.GetHashNum()
 
 	var newHash string
 	var newName string
@@ -391,11 +461,11 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 OuterLoop:
 	for retries := 0; retries < 100; retries++ {
 		torrentList := qBTConn.GetTorrentList()
-		qBTConn.FillIDs(torrentList)
+		newHashes := qBTConn.FillIDs(torrentList)
 
-		for i := oldHashNum; i < qBTConn.GetHashNum(); i++ {
-			if qBTConn.GetHashForId(i) == newHash {
-				newId = i
+		for _, hash := range newHashes {
+			if hash == newHash {
+				newId = qBTConn.GetIdOfHash(newHash)
 				break OuterLoop
 			}
 		}
@@ -437,6 +507,10 @@ OuterLoop:
 	}, "success"
 }
 
+func TorrentSet(args json.RawMessage) (JsonMap, string) {
+	return JsonMap{}, "success" // TODO
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	var req transmission.RPCRequest
 	reqBody, err := ioutil.ReadAll(r.Body)
@@ -446,25 +520,31 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	var resp JsonMap
 	var result string
-	switch {
-	case req.Method == "session-get":
+	switch req.Method {
+	case "session-get":
 		resp, result = SessionGet()
-	case req.Method == "free-space":
+	case "free-space":
 		resp, result = FreeSpace(req.Arguments)
-	case req.Method == "torrent-get":
+	case "torrent-get":
 		resp, result = TorrentGet(req.Arguments)
-	case req.Method == "session-stats":
+	case "session-stats":
 		resp, result = SessionStats()
-	case req.Method == "torrent-stop":
+	case "torrent-stop":
 		resp, result = TorrentPause(req.Arguments)
-	case req.Method == "torrent-start":
+	case "torrent-start":
 		resp, result = TorrentResume(req.Arguments)
-	case req.Method == "torrent-start-now":
+	case "torrent-start-now":
 		resp, result = TorrentResume(req.Arguments)
-	case req.Method == "torrent-verify":
+	case "torrent-verify":
 		resp, result = TorrentRecheck(req.Arguments)
-	case req.Method == "torrent-add":
+	case "torrent-remove":
+		resp, result = TorrentDelete(req.Arguments)
+	case "torrent-add":
 		resp, result = TorrentAdd(req.Arguments)
+	case "torrent-set":
+		resp, result = TorrentSet(req.Arguments)
+	default:
+		log.Error("Unknown method: ", req.Method)
 	}
 	response := JsonMap{
 		"result":    result,

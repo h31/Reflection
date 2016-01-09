@@ -78,7 +78,7 @@ var SessionGetBase = JsonMap{
 
 var TorrentGetBase = JsonMap{
 	"errorString":             "",
-	"metadataPercentComplete": 0,
+	"metadataPercentComplete": 1,
 	"peersGettingFromUs":      0,
 	"peersSendingToUs":        0,
 	"pieces":                  "///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w",
@@ -137,14 +137,14 @@ var TrackerStatsTemplate = JsonMap{
 
 var SessionStatsTemplate = JsonMap{
 	"activeTorrentCount": 0,
-	"cumulative-stats": map[string]int64{
+	"cumulative-stats": map[string]float64{
 		"downloadedBytes": 388802690736,
 		"filesAdded":      5611,
 		"secondsActive":   15681693897,
 		"sessionCount":    57,
 		"uploadedBytes":   1950265820985,
 	},
-	"current-stats": map[string]int64{
+	"current-stats": map[string]float64{
 		"downloadedBytes": 9939147143,
 		"filesAdded":      13,
 		"secondsActive":   99633,

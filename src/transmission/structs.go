@@ -15,7 +15,7 @@ type GetRequest struct {
 
 type TorrentAddRequest struct {
 	Cookies           *string      //  pointer to a string of one or more cookies.
-	Download_dir      *string      //    path to download the torrent to
+	Download_dir      *string      `json:"download-dir"` //    path to download the torrent to
 	Filename          *string      //   filename or URL of the .torrent file
 	Metainfo          *string      //   base64-encoded .torrent content
 	Paused            *interface{} //    if true, don't start the torrent
