@@ -76,6 +76,15 @@ func (q *Connection) GetPreferences() (pref Preferences) {
 	return
 }
 
+func (q *Connection) GetTransferInfo() (info TransferInfo) {
+	infoURL := q.MakeRequestURL("/query/transferInfo")
+	infoRaw := q.DoGET(infoURL)
+
+	err := json.Unmarshal(infoRaw, &info)
+	check(err)
+	return
+}
+
 func (q *Connection) GetVersion() string {
 	versionURL := q.MakeRequestURL("/version/qbittorrent")
 	return string(q.DoGET(versionURL))
@@ -117,12 +126,11 @@ func (q *Connection) GetHashNum() int {
 func (q *Connection) GetIdOfHash(hash string) int {
 	for index, value := range q.HashIds {
 		if value == hash {
-			return index+1
+			return index + 1
 		}
 	}
 	return 0 // TODO
 }
-
 
 func FindInArray(array []string, item string) bool {
 	for _, value := range array {

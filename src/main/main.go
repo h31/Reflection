@@ -147,9 +147,25 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 		dst["status"] = 5 // TR_STATUS_SEED_WAIT
 	case "uploading", "stalledUP":
 		dst["status"] = 6 // TR_STATUS_SEED
+	case "error":
+		dst["status"] = 0 // TR_STATUS_STOPPED
 	default:
 		dst["status"] = 0 // TR_STATUS_STOPPED
 	}
+	if src.State == "error" {
+		dst["error"] = 3 // TR_STAT_LOCAL_ERROR
+	} else {
+		dst["error"] = 0 // TR_STAT_OK
+	}
+	switch src.State {
+	case "stalledDL", "stalledUP":
+		dst["isStalled"] = true
+	default:
+		dst["isStalled"] = false
+	}
+	dst["percentDone"] = src.Progress
+	dst["peersGettingFromUs"] = src.Num_leechs
+	dst["peersSendingToUs"] = src.Num_seeds
 	dst["leftUntilDone"] = float64(src.Size) * (1 - src.Progress)
 	dst["desiredAvailable"] = float64(src.Size) * (1 - src.Progress) // TODO
 	dst["haveUnchecked"] = 0                                         // TODO
@@ -180,14 +196,33 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["dateCreated"] = propGeneral.Creation_date
 	dst["creator"] = propGeneral.Created_by
 	dst["doneDate"] = propGeneral.Completion_date
-	dst["downloadLimit"] = propGeneral.Dl_limit // TODO: Kb/s?
-	dst["uploadLimit"] = propGeneral.Up_limit
 	dst["totalSize"] = propGeneral.Total_size
 	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_have
 	dst["downloadedEver"] = propGeneral.Total_downloaded
 	dst["uploadedEver"] = propGeneral.Total_uploaded
 	dst["pieces"] = MakePiecesBitArray(uint(propGeneral.Pieces_num),
 		uint(propGeneral.Pieces_have))
+	dst["peersConnected"] = propGeneral.Peers
+	dst["corruptEver"] = propGeneral.Total_wasted
+
+	if propGeneral.Up_limit >= 0 {
+		dst["uploadLimited"] = true
+		dst["uploadLimit"] = propGeneral.Up_limit
+	} else {
+		dst["uploadLimited"] = false
+		dst["uploadLimit"] = 0
+	}
+
+	if propGeneral.Dl_limit >= 0 {
+		dst["downloadLimited"] = true
+		dst["downloadLimit"] = propGeneral.Dl_limit // TODO: Kb/s?
+	} else {
+		dst["downloadLimited"] = false
+		dst["downloadLimit"] = 0
+	}
+
+	dst["maxConnectedPeers"] = propGeneral.Nb_connections_limit
+	dst["peer-limit"] = propGeneral.Nb_connections_limit // TODO: What's it?
 }
 
 func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
@@ -325,6 +360,13 @@ func SessionStats() (JsonMap, string) {
 	for key, value := range transmission.SessionStatsTemplate {
 		session[key] = value
 	}
+
+	info := qBTConn.GetTransferInfo()
+	session["downloadSpeed"] = info.Dl_info_speed
+	session["uploadSpeed"] = info.Up_info_speed
+	session["current-stats"].(map[string]int64)["downloadedBytes"] = info.Dl_info_data
+	session["current-stats"].(map[string]int64)["uploadedBytes"] = info.Up_info_data
+	session["cumulative-stats"] = session["current-stats"]
 	return session, "success"
 }
 

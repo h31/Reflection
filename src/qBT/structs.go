@@ -77,6 +77,17 @@ type PropertiesFiles struct {
 	Is_seed  bool    //	True if file is seeding/complete
 }
 
+type TransferInfo struct {
+	Dl_info_speed     int    //	Global download rate (bytes/s)
+	Dl_info_data      int64  //	Data downloaded this session (bytes)
+	Up_info_speed     int    //	Global upload rate (bytes/s)
+	Up_info_data      int64  //	Data uploaded this session (bytes)
+	Dl_rate_limit     int    //	Download rate limit (bytes/s)
+	Up_rate_limit     int    //	Upload rate limit (bytes/s)
+	Dht_nodes         int    //	DHT nodes connected to
+	Connection_status string //	Connection status. See possible values here below
+}
+
 type Preferences struct {
 	Locale                         string   //	Currently selected language (e.g. en_GB for english)
 	Save_path                      string   //	Default save path for torrents, separated by slashes

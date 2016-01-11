@@ -79,33 +79,19 @@ var SessionGetBase = JsonMap{
 var TorrentGetBase = JsonMap{
 	"errorString":             "",
 	"metadataPercentComplete": 1,
-	"peersGettingFromUs":      0,
-	"peersSendingToUs":        0,
-	"pieces":                  "///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////w",
-	"downloadedEver":          1 * (1 << 30), // 1 GB,
-	"uploadedEver":            1 * (1 << 30), // 1 GB,
-	"error":                   0,             // TR_STAT_OK
 	"isFinished":              false,
-	"isStalled":               false,
-	"peersConnected":          0,
-	"percentDone":             0,
-	"queuePosition":           0,
+	"queuePosition":           0, // Looks like not supported by qBittorent
 	"seedRatioLimit":          2,
-	"seedRatioMode":           0,
+	"seedRatioMode":           0, // No local limits in qBittorrent
 	"activityDate":            1443977197,
-	"corruptEver":             0,
-	"downloadLimited":         false,
-	"maxConnectedPeers":       50,
 	"secondsDownloading":      500,
 	"secondsSeeding":          80000,
-	"uploadLimited":           false,
-	"isPrivate":               false,
+	"isPrivate":               false, // Not exposed by qBittorrent
 	"honorsSessionLimits":     true,
 	"webseedsSendingToUs":     0,
-	"peer-limit":              50,
 	"bandwidthPriority":       0,
 	"seedIdleLimit":           10,
-	"seedIdleMode":            0,
+	"seedIdleMode":            0, // TR_IDLELIMIT_GLOBAL
 	// TODO
 	"peers": []string{},
 }
@@ -137,22 +123,12 @@ var TrackerStatsTemplate = JsonMap{
 
 var SessionStatsTemplate = JsonMap{
 	"activeTorrentCount": 0,
-	"cumulative-stats": map[string]float64{
-		"downloadedBytes": 388802690736,
-		"filesAdded":      5611,
-		"secondsActive":   15681693897,
-		"sessionCount":    57,
-		"uploadedBytes":   1950265820985,
+	"current-stats": map[string]int64{
+		"filesAdded":    13,
+		"secondsActive": 99633,
+		"sessionCount":  1,
+		"uploadedBytes": 26478335758,
 	},
-	"current-stats": map[string]float64{
-		"downloadedBytes": 9939147143,
-		"filesAdded":      13,
-		"secondsActive":   99633,
-		"sessionCount":    1,
-		"uploadedBytes":   26478335758,
-	},
-	"downloadSpeed":      0,
 	"pausedTorrentCount": 127,
 	"torrentCount":       127,
-	"uploadSpeed":        0,
 }
