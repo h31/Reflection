@@ -71,7 +71,7 @@ type PropertiesTrackers struct {
 
 type PropertiesFiles struct {
 	Name     string  //	File name (including relative path)
-	Size     int     //	File size (bytes)
+	Size     int64   //	File size (bytes)
 	Progress float64 //	File progress (percentage/100)
 	Priority int     //	File priority. See possible values here below
 	Is_seed  bool    //	True if file is seeding/complete
