@@ -441,6 +441,56 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success"
 }
 
+func UploadTorrentMetainfo(metainfo []byte) (newHash, newName string) {
+	log.WithFields(log.Fields{
+		"len":  len(metainfo),
+		"sha1": fmt.Sprintf("%x\n", sha1.Sum(metainfo)),
+	}).Debug("Decoded metainfo")
+
+	var buffer bytes.Buffer
+	mime := multipart.NewWriter(&buffer)
+	mimeWriter, err := mime.CreateFormFile("torrents", "example.torrent")
+	Check(err)
+	mimeWriter.Write(metainfo)
+	mime.Close()
+
+	qBTConn.DoPOST("/command/upload", mime.FormDataContentType(), &buffer)
+	log.Debug("Torrent uploaded")
+
+	var parsedMetaInfo MetaInfo
+	parsedMetaInfo.ReadTorrentMetaInfoFile(bytes.NewBuffer(metainfo))
+
+	newHash = fmt.Sprintf("%x", parsedMetaInfo.InfoHash)
+	newName = parsedMetaInfo.Info.Name
+	return
+}
+
+func ParseMagnetLink(link string) (newHash, newName string) {
+	path := strings.TrimPrefix(link, "magnet:?")
+	params, err := url.ParseQuery(path)
+	Check(err)
+	log.WithFields(log.Fields{
+		"params": params,
+	}).Debug("Params decoded")
+	newHash = params["xt"][0]
+	name, nameProvided := params["dn"]
+	if nameProvided {
+		newName = strings.TrimPrefix(name[0], "urn:btih:")
+	} else {
+		newName = "Torrent name"
+	}
+	return
+}
+
+func GetIdOfNewHash(newHashes []string, newHash string) int {
+	for _, hash := range newHashes {
+		if hash == newHash {
+			return qBTConn.GetIdOfHash(newHash)
+		}
+	}
+	return -1 // TODO
+}
+
 func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	var req transmission.TorrentAddRequest
 	err := json.Unmarshal(args, &req)
@@ -451,65 +501,34 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 
 	var newHash string
 	var newName string
-	var newId int
 
 	if req.Metainfo != nil {
 		log.Debug("Upload torrent using metainfo")
 
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
-		log.WithFields(log.Fields{
-			"len":  len(metainfo),
-			"sha1": fmt.Sprintf("%x\n", sha1.Sum(metainfo)),
-		}).Debug("Decoded metainfo")
-
-		var buffer bytes.Buffer
-		mime := multipart.NewWriter(&buffer)
-		mimeWriter, err := mime.CreateFormFile("torrents", "example.torrent")
 		Check(err)
-		mimeWriter.Write(metainfo)
-		mime.Close()
-
-		qBTConn.DoPOST("/command/upload", mime.FormDataContentType(), &buffer)
-		log.Debug("Torrent uploaded")
-
-		var parsedMetaInfo MetaInfo
-		parsedMetaInfo.ReadTorrentMetaInfoFile(bytes.NewBuffer(metainfo))
-
-		newHash = fmt.Sprintf("%x", parsedMetaInfo.InfoHash)
-		newName = parsedMetaInfo.Info.Name
-
+		newHash, newName = UploadTorrentMetainfo(metainfo)
 	} else if req.Filename != nil {
 		path := *req.Filename
 		if strings.HasPrefix(path, "magnet:?") {
-			path = strings.TrimPrefix(path, "magnet:?")
-			params, err := url.ParseQuery(path)
-			log.WithFields(log.Fields{
-				"params": params,
-			}).Debug("Params decoded")
-			Check(err)
-			newHash = params["xt"][0]
-			name, nameProvided := params["dn"]
-			if nameProvided {
-				newName = strings.TrimPrefix(name[0], "urn:btih:")
-			} else {
-				newName = "Torrent name"
-			}
+			newHash, newName = ParseMagnetLink(path)
+		} else if strings.HasPrefix(path, "http") {
+			metainfo := DoGetWithCookies(path, req.Cookies)
+			newHash, newName = UploadTorrentMetainfo(metainfo)
 		}
 
 		http.PostForm(qBTConn.MakeRequestURL("/command/download"),
 			url.Values{"urls": {*req.Filename}})
 	}
 
-OuterLoop:
+	var newId int
 	for retries := 0; retries < 100; retries++ {
 		torrentList := qBTConn.GetTorrentList()
 		newHashes := qBTConn.FillIDs(torrentList)
 
-		for _, hash := range newHashes {
-			if hash == newHash {
-				newId = qBTConn.GetIdOfHash(newHash)
-				break OuterLoop
-			}
+		newId = GetIdOfNewHash(newHashes, newHash)
+		if newId >= 0 {
+			break
 		}
 
 		log.Debug("Nothing was found, waiting...")
@@ -520,6 +539,7 @@ OuterLoop:
 	paused := false
 	if req.Paused != nil {
 		if value, ok := (*req.Paused).(float64); ok {
+			// Workaround: Transmission Remote GUI uses a number instead of a boolean
 			paused = value != 0
 		}
 		if value, ok := (*req.Paused).(bool); ok {
