@@ -570,6 +570,49 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 }
 
 func TorrentSet(args json.RawMessage) (JsonMap, string) {
+	var req struct {
+		Ids            *json.RawMessage
+		Files_wanted   *[]int `json:"files-wanted"`
+		Files_unwanted *[]int `json:"files-unwanted"`
+	}
+	err := json.Unmarshal(args, &req)
+	Check(err)
+
+	if req.Files_wanted != nil || req.Files_unwanted != nil {
+		ids := parseIDsField(req.Ids)
+		if len(ids) != 1 {
+			log.Error("Unsupported torrent-set request")
+			return JsonMap{}, "Unsupported torrent-set request"
+		}
+		id := ids[0]
+
+		newFilesPriorities := make(map[int]int)
+		if req.Files_wanted != nil {
+			wanted := *req.Files_wanted
+			for _, fileId := range wanted {
+				newFilesPriorities[fileId] = 1 // Normal priority
+			}
+		}
+		if req.Files_unwanted != nil {
+			unwanted := *req.Files_unwanted
+			for _, fileId := range unwanted {
+				newFilesPriorities[fileId] = 0 // Do not download
+			}
+		}
+		log.WithFields(log.Fields{
+			"priorities": newFilesPriorities,
+		}).Debug("New files priorities")
+
+		for fileId, priority := range newFilesPriorities {
+			params := url.Values{
+				"hash":     {qBTConn.GetHashForId(id)},
+				"id":       {strconv.Itoa(fileId)},
+				"priority": {strconv.Itoa(priority)},
+			}
+			http.PostForm(qBTConn.MakeRequestURL("/command/setFilePrio"), params)
+		}
+	}
+
 	return JsonMap{}, "success" // TODO
 }
 
