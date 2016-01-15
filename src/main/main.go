@@ -171,7 +171,10 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["haveUnchecked"] = 0                                         // TODO
 }
 
-func MakePiecesBitArray(total, have uint) string {
+func MakePiecesBitArray(total, have int) string {
+	if (total < 0) || (have < 0) {
+		return base64.StdEncoding.EncodeToString(make([]byte, 10))
+	}
 	arrLen := uint(math.Ceil(float64(total) / 8))
 	arr := make([]byte, arrLen)
 
@@ -179,7 +182,7 @@ func MakePiecesBitArray(total, have uint) string {
 	for i := uint(0); i < fullBytes; i++ {
 		arr[i] = math.MaxUint8
 	}
-	for i := uint(0); i < (have - fullBytes*8); i++ {
+	for i := uint(0); i < (uint(have) - fullBytes*8); i++ {
 		arr[fullBytes] |= 128 >> i
 	}
 
@@ -200,8 +203,7 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_have
 	dst["downloadedEver"] = propGeneral.Total_downloaded
 	dst["uploadedEver"] = propGeneral.Total_uploaded
-	dst["pieces"] = MakePiecesBitArray(uint(propGeneral.Pieces_num),
-		uint(propGeneral.Pieces_have))
+	dst["pieces"] = MakePiecesBitArray(propGeneral.Pieces_num, propGeneral.Pieces_have)
 	dst["peersConnected"] = propGeneral.Peers
 	dst["corruptEver"] = propGeneral.Total_wasted
 
