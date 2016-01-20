@@ -2,11 +2,13 @@ package qBT
 
 import (
 	"encoding/json"
+	"errors"
 	log "github.com/Sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 func check(e error) {
@@ -137,6 +139,10 @@ func (q *Connection) DoPOST(url string, contentType string, body io.Reader) []by
 	return data
 }
 
+func (q *Connection) PostForm(url string, data url.Values) []byte {
+	return q.DoPOST(url, "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+}
+
 func (q *Connection) GetHashForId(id int) string {
 	return q.HashIds[id-1]
 }
@@ -145,13 +151,13 @@ func (q *Connection) GetHashNum() int {
 	return len(q.HashIds)
 }
 
-func (q *Connection) GetIdOfHash(hash string) int {
+func (q *Connection) GetIdOfHash(hash string) (int, error) {
 	for index, value := range q.HashIds {
 		if value == hash {
-			return index + 1
+			return index + 1, nil
 		}
 	}
-	return 0 // TODO
+	return 0, errors.New("No such hash")
 }
 
 func FindInArray(array []string, item string) bool {
@@ -165,7 +171,8 @@ func FindInArray(array []string, item string) bool {
 
 func (q *Connection) CheckAuth() {
 	url := q.MakeRequestURL("/query/torrents")
-	resp, _ := q.Client.Get(url)
+	resp, err := q.Client.Get(url)
+	check(err)
 	q.Auth.Required = (resp.StatusCode == http.StatusForbidden)
 	if q.Auth.Required {
 		log.Info("Auth is required")

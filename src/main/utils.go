@@ -29,7 +29,7 @@ func DoGetWithCookies(path string, cookies *string) []byte {
 		header.Add("Cookie", *cookies)
 		httpReq.Header = header
 	}
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := qBTConn.Client.Do(httpReq)
 	Check(err)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)

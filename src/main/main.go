@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -83,7 +84,8 @@ func parseIDsField(args *json.RawMessage) []int {
 			case float64:
 				result[i] = int(id)
 			case string:
-				result[i] = qBTConn.GetIdOfHash(id)
+				result[i], err = qBTConn.GetIdOfHash(id)
+				Check(err)
 			}
 		}
 		return result
@@ -377,7 +379,7 @@ func TorrentPause(args json.RawMessage) (JsonMap, string) {
 	for _, hash := range hashes {
 		log.Debug("Stopping torrent with hash ", hash)
 
-		http.PostForm(qBTConn.MakeRequestURL("/command/pause"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/pause"),
 			url.Values{"hash": {hash}})
 	}
 	return JsonMap{}, "success"
@@ -388,7 +390,7 @@ func TorrentResume(args json.RawMessage) (JsonMap, string) {
 	for _, hash := range hashes {
 		log.Debug("Starting torrent with hash ", hash)
 
-		http.PostForm(qBTConn.MakeRequestURL("/command/resume"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/resume"),
 			url.Values{"hash": {hash}})
 	}
 	return JsonMap{}, "success"
@@ -399,7 +401,7 @@ func TorrentRecheck(args json.RawMessage) (JsonMap, string) {
 	for _, hash := range hashes {
 		log.Debug("Verifying torrent with hash ", hash)
 
-		http.PostForm(qBTConn.MakeRequestURL("/command/recheck"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/recheck"),
 			url.Values{"hash": {hash}})
 	}
 	return JsonMap{}, "success"
@@ -432,39 +434,45 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 
 	if deleteFiles {
 		log.Debug("Remove with files ", joinedHashes)
-		http.PostForm(qBTConn.MakeRequestURL("/command/deletePerm"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/deletePerm"),
 			url.Values{"hashes": {joinedHashes}})
 	} else {
 		log.Debug("Remove ", joinedHashes)
-		http.PostForm(qBTConn.MakeRequestURL("/command/delete"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/delete"),
 			url.Values{"hashes": {joinedHashes}})
 	}
 
 	return JsonMap{}, "success"
 }
 
-func UploadTorrentMetainfo(metainfo []byte) (newHash, newName string) {
-	log.WithFields(log.Fields{
-		"len":  len(metainfo),
-		"sha1": fmt.Sprintf("%x\n", sha1.Sum(metainfo)),
-	}).Debug("Decoded metainfo")
-
+func UploadTorrent(metainfo *[]byte, urls *string, destDir *string) {
 	var buffer bytes.Buffer
 	mime := multipart.NewWriter(&buffer)
-	mimeWriter, err := mime.CreateFormFile("torrents", "example.torrent")
-	Check(err)
-	mimeWriter.Write(metainfo)
+
+	if metainfo != nil {
+		mimeWriter, err := mime.CreateFormFile("torrents", "example.torrent")
+		Check(err)
+		mimeWriter.Write(*metainfo)
+	}
+
+	if urls != nil {
+		urlsWriter, err := mime.CreateFormField("urls")
+		Check(err)
+		urlsWriter.Write([]byte(*urls))
+	}
+
+	if destDir != nil {
+		destDirWriter, err := mime.CreateFormField("savepath")
+		Check(err)
+		destDirWriter.Write([]byte(*destDir))
+	}
+	mime.CreateFormField("cookie")
+	mime.CreateFormField("label")
+
 	mime.Close()
 
 	qBTConn.DoPOST(qBTConn.MakeRequestURL("/command/upload"), mime.FormDataContentType(), &buffer)
 	log.Debug("Torrent uploaded")
-
-	var parsedMetaInfo MetaInfo
-	parsedMetaInfo.ReadTorrentMetaInfoFile(bytes.NewBuffer(metainfo))
-
-	newHash = fmt.Sprintf("%x", parsedMetaInfo.InfoHash)
-	newName = parsedMetaInfo.Info.Name
-	return
 }
 
 func ParseMagnetLink(link string) (newHash, newName string) {
@@ -474,23 +482,38 @@ func ParseMagnetLink(link string) (newHash, newName string) {
 	log.WithFields(log.Fields{
 		"params": params,
 	}).Debug("Params decoded")
-	newHash = params["xt"][0]
+	trimmed := strings.TrimPrefix(params["xt"][0], "urn:btih:")
+	newHash = strings.ToLower(trimmed)
 	name, nameProvided := params["dn"]
 	if nameProvided {
-		newName = strings.TrimPrefix(name[0], "urn:btih:")
+		newName = name[0]
 	} else {
 		newName = "Torrent name"
 	}
 	return
 }
 
-func GetIdOfNewHash(newHashes []string, newHash string) int {
+func ParseMetainfo(metainfo []byte) (newHash, newName string) {
+	var parsedMetaInfo MetaInfo
+	parsedMetaInfo.ReadTorrentMetaInfoFile(bytes.NewBuffer(metainfo))
+
+	log.WithFields(log.Fields{
+		"len":  len(metainfo),
+		"sha1": fmt.Sprintf("%x\n", sha1.Sum(metainfo)),
+	}).Debug("Decoded metainfo")
+
+	newHash = fmt.Sprintf("%x", parsedMetaInfo.InfoHash)
+	newName = parsedMetaInfo.Info.Name
+	return
+}
+
+func GetIdOfNewHash(newHashes []string, newHash string) (int, error) {
 	for _, hash := range newHashes {
 		if hash == newHash {
 			return qBTConn.GetIdOfHash(newHash)
 		}
 	}
-	return -1 // TODO
+	return -1, errors.New("Hash not found")
 }
 
 func TorrentAdd(args json.RawMessage) (JsonMap, string) {
@@ -509,33 +532,66 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
 		Check(err)
-		newHash, newName = UploadTorrentMetainfo(metainfo)
+		newHash, newName = ParseMetainfo(metainfo)
+		UploadTorrent(&metainfo, nil, req.Download_dir)
 	} else if req.Filename != nil {
 		path := *req.Filename
 		if strings.HasPrefix(path, "magnet:?") {
 			newHash, newName = ParseMagnetLink(path)
+
+			if req.Download_dir != nil {
+				qBTConn.PostForm(qBTConn.MakeRequestURL("/command/download"),
+					url.Values{"urls": {*req.Filename}, "savepath": {*req.Download_dir}})
+			} else {
+				qBTConn.PostForm(qBTConn.MakeRequestURL("/command/download"),
+					url.Values{"urls": {*req.Filename}})
+			}
 		} else if strings.HasPrefix(path, "http") {
 			metainfo := DoGetWithCookies(path, req.Cookies)
-			newHash, newName = UploadTorrentMetainfo(metainfo)
-		}
 
-		http.PostForm(qBTConn.MakeRequestURL("/command/download"),
-			url.Values{"urls": {*req.Filename}})
+			newHash, newName = ParseMetainfo(metainfo)
+			UploadTorrent(&metainfo, nil, nil)
+		}
 	}
 
-	var newId int
+	log.WithFields(log.Fields{
+		"hash": newHash,
+		"name": newName,
+	}).Debug("Attempting to add torrent")
+
+	if newId, err := qBTConn.GetIdOfHash(newHash); err == nil {
+		return JsonMap{
+			"torrent-duplicate": JsonMap{
+				"id":         newId,
+				"name":       newName,
+				"hashString": newHash,
+			},
+		}, "success"
+	}
+
+	newId := -1
 	for retries := 0; retries < 100; retries++ {
+		time.Sleep(50 * time.Millisecond)
+
 		torrentList := qBTConn.GetTorrentList()
 		newHashes := qBTConn.FillIDs(torrentList)
+		if len(newHashes) > 0 {
+			log.WithFields(log.Fields{
+				"hashes": newHashes,
+			}).Debug("New hashes")
+		}
 
-		newId = GetIdOfNewHash(newHashes, newHash)
-		if newId >= 0 {
+		newId, err = GetIdOfNewHash(newHashes, newHash)
+		if err == nil {
+			log.Debug("Found ID ", newId)
 			break
 		}
 
 		log.Debug("Nothing was found, waiting...")
+	}
 
-		time.Sleep(10 * time.Millisecond)
+	if newId == -1 {
+		return JsonMap{}, "Torrent-add timeout"
 	}
 
 	paused := false
@@ -549,10 +605,10 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		}
 	}
 	if paused {
-		http.PostForm(qBTConn.MakeRequestURL("/command/pause"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/pause"),
 			url.Values{"hash": {newHash}})
 	} else {
-		http.PostForm(qBTConn.MakeRequestURL("/command/resume"),
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/resume"),
 			url.Values{"hash": {newHash}})
 	}
 
@@ -611,7 +667,7 @@ func TorrentSet(args json.RawMessage) (JsonMap, string) {
 				"id":       {strconv.Itoa(fileId)},
 				"priority": {strconv.Itoa(priority)},
 			}
-			http.PostForm(qBTConn.MakeRequestURL("/command/setFilePrio"), params)
+			qBTConn.PostForm(qBTConn.MakeRequestURL("/command/setFilePrio"), params)
 		}
 	}
 
@@ -623,6 +679,7 @@ func Login(username, password string) bool {
 	if loginOK {
 		qBTConn.Auth.Username = username
 		qBTConn.Auth.Password = password
+		qBTConn.Auth.LoggedIn = true
 		return true
 	} else {
 		return false
@@ -714,5 +771,6 @@ func main() {
 	http.HandleFunc("/transmission/rpc", handler)
 	http.HandleFunc("/rpc", handler)
 	http.Handle("/", http.FileServer(http.Dir("web/")))
-	http.ListenAndServe(":9091", nil)
+	err := http.ListenAndServe(":9091", nil)
+	Check(err)
 }

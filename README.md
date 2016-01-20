@@ -22,7 +22,7 @@ What features are not supported yet:
 
 Please note that both qBittorrent and Transmission have some unique features.
 For example, some torrent properties such as a private flag are not exposed by qBittorrent.
-When Transmission clients request such information, Reflection fills it with some template data. Template values are stored in src/transmission/templates.go.
+In case Transmission clients request such information, Reflection responds with a predefined template data. Template values are stored in src/transmission/templates.go.
 
 ## Usage:
 
