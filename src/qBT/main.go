@@ -15,12 +15,22 @@ func check(e error) {
 	}
 }
 
+type Auth struct {
+	Required bool
+	LoggedIn bool
+	Cookie   http.Cookie
+
+	Username string
+	Password string
+}
+
 type Connection struct {
 	Addr string
 	// Hash to ID map. Array index is an ID
 	HashIds []string
 	Tr      *http.Transport
 	Client  *http.Client
+	Auth    Auth
 }
 
 func (q *Connection) MakeRequestURLWithParam(path string, params map[string]string) string {
@@ -100,15 +110,27 @@ func (q *Connection) GetPropsFiles(id int) (files []PropertiesFiles) {
 }
 
 func (q *Connection) DoGET(url string) []byte {
-	resp, err := q.Client.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if q.Auth.Required {
+		req.AddCookie(&q.Auth.Cookie)
+	}
+	check(err)
+	resp, err := q.Client.Do(req)
 	check(err)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
 	return data
 }
 
-func (q *Connection) DoPOST(path string, contentType string, body io.Reader) []byte {
-	resp, err := q.Client.Post(q.MakeRequestURL(path), contentType, body)
+func (q *Connection) DoPOST(url string, contentType string, body io.Reader) []byte {
+	req, err := http.NewRequest("POST", url, body)
+	check(err)
+	req.Header.Set("Content-Type", contentType)
+	if q.Auth.Required {
+		req.AddCookie(&q.Auth.Cookie)
+	}
+
+	resp, err := q.Client.Do(req)
 	check(err)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
@@ -139,6 +161,35 @@ func FindInArray(array []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func (q *Connection) CheckAuth() {
+	url := q.MakeRequestURL("/query/torrents")
+	resp, _ := q.Client.Get(url)
+	q.Auth.Required = (resp.StatusCode == http.StatusForbidden)
+	if q.Auth.Required {
+		log.Info("Auth is required")
+	} else {
+		log.Info("Auth is not required")
+	}
+}
+
+func (q *Connection) Login(username, password string) bool {
+	resp, err := http.PostForm(q.MakeRequestURL("/login"),
+		url.Values{"username": {username}, "password": {password}})
+	check(err)
+	authOK := false
+	for _, value := range resp.Cookies() {
+		if value != nil {
+			cookie := *value
+			if cookie.Name == "SID" {
+				authOK = true
+				q.Auth.Cookie = cookie
+				break
+			}
+		}
+	}
+	return authOK
 }
 
 func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {

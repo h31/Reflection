@@ -173,7 +173,7 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 
 func MakePiecesBitArray(total, have int) string {
 	if (total < 0) || (have < 0) {
-		return base64.StdEncoding.EncodeToString(make([]byte, 10))
+		return "" // Empty array
 	}
 	arrLen := uint(math.Ceil(float64(total) / 8))
 	arr := make([]byte, arrLen)
@@ -456,7 +456,7 @@ func UploadTorrentMetainfo(metainfo []byte) (newHash, newName string) {
 	mimeWriter.Write(metainfo)
 	mime.Close()
 
-	qBTConn.DoPOST("/command/upload", mime.FormDataContentType(), &buffer)
+	qBTConn.DoPOST(qBTConn.MakeRequestURL("/command/upload"), mime.FormDataContentType(), &buffer)
 	log.Debug("Torrent uploaded")
 
 	var parsedMetaInfo MetaInfo
@@ -618,12 +618,41 @@ func TorrentSet(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success" // TODO
 }
 
+func Login(username, password string) bool {
+	loginOK := qBTConn.Login(username, password)
+	if loginOK {
+		qBTConn.Auth.Username = username
+		qBTConn.Auth.Password = password
+		return true
+	} else {
+		return false
+	}
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	var req transmission.RPCRequest
 	reqBody, err := ioutil.ReadAll(r.Body)
 	log.Debug("Got request ", string(reqBody))
 	err = json.Unmarshal(reqBody, &req)
 	Check(err)
+
+	if qBTConn.Auth.Required {
+		username, password, ok := r.BasicAuth()
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var authOK = false
+		if !qBTConn.Auth.LoggedIn {
+			authOK = Login(username, password)
+		} else {
+			authOK = (qBTConn.Auth.Username == username) && (qBTConn.Auth.Password == password)
+		}
+		if !authOK {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+	}
 
 	var resp JsonMap
 	var result string
@@ -679,6 +708,8 @@ func main() {
 		DisableKeepAlives: true,
 	}
 	qBTConn.Client = &http.Client{Transport: qBTConn.Tr}
+
+	qBTConn.CheckAuth()
 
 	http.HandleFunc("/transmission/rpc", handler)
 	http.HandleFunc("/rpc", handler)

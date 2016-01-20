@@ -11,21 +11,25 @@ Currently Reflection is able to:
 * Choose which files should be downloaded
 
 Compatibility:
-* Reflection emulates a latest version of Transmission (2.84)
+* Reflection emulates the latest version of Transmission (2.84)
 * Tested against qBittorrent 3.3.1, should work with 3.2.x too.
 * Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android
 
 What features are not supported yet:
-* Authentication
 * Set torrent properties (download/upload speed, etc)
 * Show and change torrent client settings
 * Show peer table
 
-Please note that some features are not implemented in qBittorrent WebUI API, so it's not possible to use them.
+Please note that both qBittorrent and Transmission have some unique features.
+For example, some torrent properties such as a private flag are not exposed by qBittorrent.
+When Transmission clients request such information, Reflection fills it with some template data. Template values are stored in src/transmission/templates.go.
 
 ## Usage:
 
-```base
+```bash
+git clone https://github.com/h31/Reflection.git
+cd Reflection/
+export GOPATH=$(pwd)
 go get main
 go build main
 ./main
@@ -35,6 +39,5 @@ Binaries for some popular platforms (Windows, Linux, OS X) can be downloaded fro
 
 Use a `--help` flag to show settings. Default qBittorrent address is `http://localhost:8080/`.
 
-Reflection works best with this qBittorrent settings (can be changed in ~/.config/qBittorrent/qBittorrent.conf):
-* `WebUI\LocalHostAuth=false` - otherwise authentication error will happen
+Reflection works best with these qBittorrent settings (can be changed in ~/.config/qBittorrent/qBittorrent.conf):
 * `Downloads\StartInPause=true` - highly recommended for a stable work
