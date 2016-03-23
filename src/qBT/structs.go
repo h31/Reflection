@@ -89,82 +89,82 @@ type TransferInfo struct {
 }
 
 type Preferences struct {
-	Locale                         string   //	Currently selected language (e.g. en_GB for english)
-	Save_path                      string   //	Default save path for torrents, separated by slashes
-	Temp_path_enabled              bool     //	True if folder for incomplete torrents is enabled
-	Temp_path                      string   //	Path for incomplete torrents, separated by slashes
-	Scan_dirs                      []string //	List of watch folders to add torrent automatically; slashes are used as path separators; list entries are separated by commas
-	Download_in_scan_dirs          []bool   //	True if torrents should be downloaded to watch folder; list entries are separated by commas
-	Export_dir_enabled             bool     //	True if .torrent file should be copied to export directory upon adding
-	Export_dir                     string   //	Path to directory to copy .torrent files ifexport_dir_enabled is enabled; path is separated by slashes
-	Mail_notification_enabled      bool     //	True if e-mail notification should be enabled
-	Mail_notification_email        string   //	e-mail to send notifications to
-	Mail_notification_smtp         string   //	smtp server for e-mail notifications
-	Mail_notification_ssl_enabled  bool     //	True if smtp server requires SSL connection
-	Mail_notification_auth_enabled bool     //	True if smtp server requires authentication
-	Mail_notification_username     string   //	Username for smtp authentication
-	Mail_notification_password     string   //	Password for smtp authentication
-	Autorun_enabled                bool     //	True if external program should be run after torrent has finished downloading
-	Autorun_program                string   //	Program path/name/arguments to run ifautorun_enabled is enabled; path is separated by slashes; you can use %f and%n arguments, which will be expanded by qBittorent as path_to_torrent_file and torrent_name (from the GUI; not the .torrent file name) respectively
-	Preallocate_all                bool     //	True if file preallocation should take place, otherwise sparse files are used
-	Queueing_enabled               bool     //	True if torrent queuing is enabled
-	Max_active_downloads           int      //	Maximum number of active simultaneous downloads
-	Max_active_torrents            int      //	Maximum number of active simultaneous downloads and uploads
-	Max_active_uploads             int      //	Maximum number of active simultaneous uploads
-	Dont_count_slow_torrents       bool     //	If true torrents w/o any activity (stalled ones) will not be counted towards max_active_*limits; see dont_count_slow_torrents for more information
-	Max_ratio_enabled              bool     //	True if share ratio limit is enabled
-	Max_ratio                      float64  //	Get the global share ratio limit
-	Max_ratio_act                  int      //	Action performed when a torrent reaches the maximum share ratio. See list of possible values here below.
-	Incomplete_files_ext           bool     //	If true .!qB extension will be appended to incomplete files
-	Listen_port                    int      //	Port for incoming connections
-	Upnp                           bool     //	True if UPnP/NAT-PMP is enabled
-	Random_port                    bool     //	True if the port is randomly selected
-	Dl_limit                       int      //	Global download speed limit in KiB/s; -1means no limit is applied
-	Up_limit                       int      //	Global upload speed limit in KiB/s; -1means no limit is applied
-	Max_connec                     int      //	Maximum global number of simultaneous connections
-	Max_connec_per_torrent         int      //	Maximum number of simultaneous connections per torrent
-	Max_uploads                    int      //	Maximum number of upload slots
-	Max_uploads_per_torrent        int      //	Maximum number of upload slots per torrent
-	Enable_utp                     bool     //	True if uTP protocol should be enabled; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
-	Limit_utp_rate                 bool     //	True if [du]l_limit should be applied to uTP connections; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
-	Limit_tcp_overhead             bool     //	True if [du]l_limit should be applied to estimated TCP overhead (service data: e.g. packet headers)
-	Alt_dl_limit                   int      //	Alternative global download speed limit in KiB/s
-	Alt_up_limit                   int      //	Alternative global upload speed limit in KiB/s
-	Scheduler_enabled              bool     //	True if alternative limits should be applied according to schedule
-	Schedule_from_hour             int      //	Scheduler starting hour
-	Schedule_from_min              int      //	Scheduler starting minute
-	Schedule_to_hour               int      //	Scheduler ending hour
-	Schedule_to_min                int      //	Scheduler ending minute
-	Scheduler_days                 int      //	Scheduler days. See possible values here below
-	Dht                            bool     //	True if DHT is enabled
-	DhtSameAsBT                    bool     //	True if DHT port should match TCP port
-	Dht_port                       int      //	DHT port if dhtSameAsBT is false
-	Pex                            bool     //	True if PeX is enabled
-	Lsd                            bool     //	True if LSD is eanbled
-	Encryption                     int      //	See list of possible values here below
-	Anonymous_mode                 bool     //	If true anonymous mode will be enabled; read more here; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
-	Proxy_type                     int      //	See list of possible values here below
-	Proxy_ip                       string   //	Proxy IP address or domain name
-	Proxy_port                     int      //	Proxy port
-	Proxy_peer_connections         bool     //	True if peer and web seed connections should be proxified; this option will have any effect only in qBittorent built against libtorrent version 0.16.X and higher
-	Force_proxy                    bool     //	True if the connections not supported by the proxy are disabled
-	Proxy_auth_enabled             bool     //	True proxy requires authentication; doesn't apply to SOCKS4 proxies
-	Proxy_username                 string   //	Username for proxy authentication
-	Proxy_password                 string   //	Password for proxy authentication
-	Ip_filter_enabled              bool     //	True if external IP filter should be enabled
-	Ip_filter_path                 string   //	Path to IP filter file (.dat, .p2p, .p2b files are supported); path is separated by slashes
-	Ip_filter_trackers             bool     //	True if IP filters are applied to trackers
-	Web_ui_port                    int      //	WebUI port
-	Web_ui_upnp                    bool     //	True if UPnP is used for the WebUI port
-	Web_ui_username                string   //	WebUI username
-	Web_ui_password                string   //	MD5 hash of WebUI password; hash is generated from the following string:username:Web UI Access:plain_text_web_ui_password
-	Bypass_local_auth              bool     //	True if auithetication challenge for loopback address (127.0.0.1) should be disabled
-	Use_https                      bool     //	True if WebUI HTTPS access is eanbled
-	Ssl_key                        string   //	SSL keyfile contents (this is a not a path)
-	Ssl_cert                       string   //	SSL certificate contents (this is a not a path)
-	Dyndns_enabled                 bool     //	True if server DNS should be updated dynamically
-	Dyndns_service                 int      //	See list of possible values here below
-	Dyndns_username                string   //	Username for DDNS service
-	Dyndns_password                string   //	Password for DDNS service
-	Dyndns_domain                  string   //	Your DDNS domain name
+	Locale                         string      //	Currently selected language (e.g. en_GB for english)
+	Save_path                      string      //	Default save path for torrents, separated by slashes
+	Temp_path_enabled              bool        //	True if folder for incomplete torrents is enabled
+	Temp_path                      string      //	Path for incomplete torrents, separated by slashes
+	Scan_dirs                      interface{} //	List of watch folders to add torrent automatically; slashes are used as path separators; list entries are separated by commas
+	Download_in_scan_dirs          []bool      //	True if torrents should be downloaded to watch folder; list entries are separated by commas
+	Export_dir_enabled             bool        //	True if .torrent file should be copied to export directory upon adding
+	Export_dir                     string      //	Path to directory to copy .torrent files ifexport_dir_enabled is enabled; path is separated by slashes
+	Mail_notification_enabled      bool        //	True if e-mail notification should be enabled
+	Mail_notification_email        string      //	e-mail to send notifications to
+	Mail_notification_smtp         string      //	smtp server for e-mail notifications
+	Mail_notification_ssl_enabled  bool        //	True if smtp server requires SSL connection
+	Mail_notification_auth_enabled bool        //	True if smtp server requires authentication
+	Mail_notification_username     string      //	Username for smtp authentication
+	Mail_notification_password     string      //	Password for smtp authentication
+	Autorun_enabled                bool        //	True if external program should be run after torrent has finished downloading
+	Autorun_program                string      //	Program path/name/arguments to run ifautorun_enabled is enabled; path is separated by slashes; you can use %f and%n arguments, which will be expanded by qBittorent as path_to_torrent_file and torrent_name (from the GUI; not the .torrent file name) respectively
+	Preallocate_all                bool        //	True if file preallocation should take place, otherwise sparse files are used
+	Queueing_enabled               bool        //	True if torrent queuing is enabled
+	Max_active_downloads           int         //	Maximum number of active simultaneous downloads
+	Max_active_torrents            int         //	Maximum number of active simultaneous downloads and uploads
+	Max_active_uploads             int         //	Maximum number of active simultaneous uploads
+	Dont_count_slow_torrents       bool        //	If true torrents w/o any activity (stalled ones) will not be counted towards max_active_*limits; see dont_count_slow_torrents for more information
+	Max_ratio_enabled              bool        //	True if share ratio limit is enabled
+	Max_ratio                      float64     //	Get the global share ratio limit
+	Max_ratio_act                  int         //	Action performed when a torrent reaches the maximum share ratio. See list of possible values here below.
+	Incomplete_files_ext           bool        //	If true .!qB extension will be appended to incomplete files
+	Listen_port                    int         //	Port for incoming connections
+	Upnp                           bool        //	True if UPnP/NAT-PMP is enabled
+	Random_port                    bool        //	True if the port is randomly selected
+	Dl_limit                       int         //	Global download speed limit in KiB/s; -1means no limit is applied
+	Up_limit                       int         //	Global upload speed limit in KiB/s; -1means no limit is applied
+	Max_connec                     int         //	Maximum global number of simultaneous connections
+	Max_connec_per_torrent         int         //	Maximum number of simultaneous connections per torrent
+	Max_uploads                    int         //	Maximum number of upload slots
+	Max_uploads_per_torrent        int         //	Maximum number of upload slots per torrent
+	Enable_utp                     bool        //	True if uTP protocol should be enabled; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
+	Limit_utp_rate                 bool        //	True if [du]l_limit should be applied to uTP connections; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
+	Limit_tcp_overhead             bool        //	True if [du]l_limit should be applied to estimated TCP overhead (service data: e.g. packet headers)
+	Alt_dl_limit                   int         //	Alternative global download speed limit in KiB/s
+	Alt_up_limit                   int         //	Alternative global upload speed limit in KiB/s
+	Scheduler_enabled              bool        //	True if alternative limits should be applied according to schedule
+	Schedule_from_hour             int         //	Scheduler starting hour
+	Schedule_from_min              int         //	Scheduler starting minute
+	Schedule_to_hour               int         //	Scheduler ending hour
+	Schedule_to_min                int         //	Scheduler ending minute
+	Scheduler_days                 int         //	Scheduler days. See possible values here below
+	Dht                            bool        //	True if DHT is enabled
+	DhtSameAsBT                    bool        //	True if DHT port should match TCP port
+	Dht_port                       int         //	DHT port if dhtSameAsBT is false
+	Pex                            bool        //	True if PeX is enabled
+	Lsd                            bool        //	True if LSD is eanbled
+	Encryption                     int         //	See list of possible values here below
+	Anonymous_mode                 bool        //	If true anonymous mode will be enabled; read more here; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
+	Proxy_type                     int         //	See list of possible values here below
+	Proxy_ip                       string      //	Proxy IP address or domain name
+	Proxy_port                     int         //	Proxy port
+	Proxy_peer_connections         bool        //	True if peer and web seed connections should be proxified; this option will have any effect only in qBittorent built against libtorrent version 0.16.X and higher
+	Force_proxy                    bool        //	True if the connections not supported by the proxy are disabled
+	Proxy_auth_enabled             bool        //	True proxy requires authentication; doesn't apply to SOCKS4 proxies
+	Proxy_username                 string      //	Username for proxy authentication
+	Proxy_password                 string      //	Password for proxy authentication
+	Ip_filter_enabled              bool        //	True if external IP filter should be enabled
+	Ip_filter_path                 string      //	Path to IP filter file (.dat, .p2p, .p2b files are supported); path is separated by slashes
+	Ip_filter_trackers             bool        //	True if IP filters are applied to trackers
+	Web_ui_port                    int         //	WebUI port
+	Web_ui_upnp                    bool        //	True if UPnP is used for the WebUI port
+	Web_ui_username                string      //	WebUI username
+	Web_ui_password                string      //	MD5 hash of WebUI password; hash is generated from the following string:username:Web UI Access:plain_text_web_ui_password
+	Bypass_local_auth              bool        //	True if auithetication challenge for loopback address (127.0.0.1) should be disabled
+	Use_https                      bool        //	True if WebUI HTTPS access is eanbled
+	Ssl_key                        string      //	SSL keyfile contents (this is a not a path)
+	Ssl_cert                       string      //	SSL certificate contents (this is a not a path)
+	Dyndns_enabled                 bool        //	True if server DNS should be updated dynamically
+	Dyndns_service                 int         //	See list of possible values here below
+	Dyndns_username                string      //	Username for DDNS service
+	Dyndns_password                string      //	Password for DDNS service
+	Dyndns_domain                  string      //	Your DDNS domain name
 }
