@@ -93,7 +93,7 @@ type Preferences struct {
 	Save_path                      string   //	Default save path for torrents, separated by slashes
 	Temp_path_enabled              bool     //	True if folder for incomplete torrents is enabled
 	Temp_path                      string   //	Path for incomplete torrents, separated by slashes
-	Scan_dirs                      []string //	List of watch folders to add torrent automatically; slashes are used as path separators; list entries are separated by commas
+	Scan_dirs                      interface{} //	List of watch folders to add torrent automatically; slashes are used as path separators; list entries are separated by commas
 	Download_in_scan_dirs          []bool   //	True if torrents should be downloaded to watch folder; list entries are separated by commas
 	Export_dir_enabled             bool     //	True if .torrent file should be copied to export directory upon adding
 	Export_dir                     string   //	Path to directory to copy .torrent files ifexport_dir_enabled is enabled; path is separated by slashes

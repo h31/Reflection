@@ -250,8 +250,8 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 		trackerStats[i]["tier"] = 0 // TODO
 	}
 
-	dst["trackers"] = trackersList
-	dst["trackerStats"] = trackerStats
+	dst["trackers"] = make([]JsonMap, 0)
+	dst["trackerStats"] = make([]JsonMap, 0)
 }
 
 func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
@@ -355,7 +355,7 @@ func FreeSpace(args json.RawMessage) (JsonMap, string) {
 
 	return JsonMap{
 		"path":       path,
-		"size-bytes": float64(100 * (1 << 30)), // 100 GB
+		"size-bytes": int64(100 * (1 << 30)), // 100 GB
 	}, "success"
 }
 
