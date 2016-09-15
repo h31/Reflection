@@ -17,6 +17,17 @@ func check(e error) {
 	}
 }
 
+func checkAndLog(e error, payload string) {
+	if e != nil {
+		tmpfile, _ := ioutil.TempFile("", "reflection")
+		tmpfile.WriteString(payload)
+		log.WithField("filename", tmpfile.Name()).Error("Saved payload in file")
+		tmpfile.Close()
+
+		panic(e)
+	}
+}
+
 type Auth struct {
 	Required bool
 	LoggedIn bool
@@ -57,7 +68,7 @@ func (q *Connection) GetTorrentList() (resp []TorrentsList) {
 	torrents := q.DoGET(url)
 
 	err := json.Unmarshal(torrents, &resp)
-	check(err)
+	checkAndLog(err, torrents)
 	return
 }
 
@@ -66,7 +77,7 @@ func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
 	propGeneralRaw := q.DoGET(propGeneralURL)
 
 	err := json.Unmarshal(propGeneralRaw, &propGeneral)
-	check(err)
+	checkAndLog(err, propGeneralRaw)
 	return
 }
 
@@ -75,7 +86,7 @@ func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
 	trackersRaw := q.DoGET(trackersURL)
 
 	err := json.Unmarshal(trackersRaw, &trackers)
-	check(err)
+	checkAndLog(err, trackersRaw)
 	return
 }
 
@@ -84,7 +95,7 @@ func (q *Connection) GetPreferences() (pref Preferences) {
 	prefRaw := q.DoGET(prefURL)
 
 	err := json.Unmarshal(prefRaw, &pref)
-	check(err)
+	checkAndLog(err, prefRaw)
 	return
 }
 
@@ -93,7 +104,7 @@ func (q *Connection) GetTransferInfo() (info TransferInfo) {
 	infoRaw := q.DoGET(infoURL)
 
 	err := json.Unmarshal(infoRaw, &info)
-	check(err)
+	checkAndLog(err, infoRaw)
 	return
 }
 
@@ -107,7 +118,7 @@ func (q *Connection) GetPropsFiles(id int) (files []PropertiesFiles) {
 	filesRaw := q.DoGET(filesURL)
 
 	err := json.Unmarshal(filesRaw, &files)
-	check(err)
+	checkAndLog(err, filesRaw)
 	return
 }
 
