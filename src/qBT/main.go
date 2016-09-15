@@ -17,10 +17,10 @@ func check(e error) {
 	}
 }
 
-func checkAndLog(e error, payload string) {
+func checkAndLog(e error, payload []byte) {
 	if e != nil {
 		tmpfile, _ := ioutil.TempFile("", "reflection")
-		tmpfile.WriteString(payload)
+		tmpfile.Write(payload)
 		log.WithField("filename", tmpfile.Name()).Error("Saved payload in file")
 		tmpfile.Close()
 
