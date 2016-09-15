@@ -54,7 +54,7 @@ type PropertiesGeneral struct {
 	Peers_total              int     //	Number of peers in the swarm
 	Pieces_have              int     //	Number of pieces owned
 	Pieces_num               int     //	Number of pieces of the torrent
-	Reannounce               int     //	Number of seconds until the next announce
+	Reannounce               int64   //	Number of seconds until the next announce
 	Seeds                    int     //	Number of seeds connected to
 	Seeds_total              int     //	Number of seeds in the swarm
 	Total_size               int64   //	Torrent total size (bytes)
