@@ -251,8 +251,8 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 		trackerStats[i]["tier"] = 0 // TODO
 	}
 
-	dst["trackers"] = make([]JsonMap, 0)
-	dst["trackerStats"] = make([]JsonMap, 0)
+	dst["trackers"] = trackersList
+	dst["trackerStats"] = trackerStats
 }
 
 func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
