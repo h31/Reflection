@@ -772,6 +772,6 @@ func main() {
 	http.HandleFunc("/transmission/rpc", handler)
 	http.HandleFunc("/rpc", handler)
 	http.Handle("/", http.FileServer(http.Dir("web/")))
-	err := http.ListenAndServe(":9091", nil)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
 	Check(err)
 }
