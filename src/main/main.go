@@ -22,9 +22,10 @@ import (
 )
 
 var (
-	verbose = kingpin.Flag("verbose", "Enable debug output").Short('v').Bool()
-	apiAddr = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
-	port    = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
+	verbose        = kingpin.Flag("verbose", "Enable debug output").Short('v').Bool()
+	apiAddr        = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
+	port           = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
+	num_of_retries = kingpin.Flag("num", "Number of retries").Short('n').Default("10").Int()
 )
 
 var deprecatedFields = []string{
@@ -749,7 +750,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	respBody, err := json.Marshal(response)
 	Check(err)
 	w.Header().Set("Content-Length", strconv.Itoa(len(respBody)))
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Write(respBody)
 }
 
@@ -766,7 +767,7 @@ func main() {
 	}
 	qBTConn.Client = &http.Client{Transport: qBTConn.Tr}
 
-	qBTConn.CheckAuth()
+	qBTConn.TryToCheckAuth(*num_of_retries)
 
 	http.HandleFunc("/transmission/rpc", handler)
 	http.HandleFunc("/rpc", handler)

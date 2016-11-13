@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func check(e error) {
@@ -180,15 +181,34 @@ func FindInArray(array []string, item string) bool {
 	return false
 }
 
-func (q *Connection) CheckAuth() {
-	url := q.MakeRequestURL("/query/torrents")
-	resp, err := q.Client.Get(url)
-	check(err)
+func (q *Connection) CheckAuth() error {
+	requestURL := q.MakeRequestURL("/query/torrents")
+	resp, err := q.Client.Get(requestURL)
+	if err != nil {
+		return err
+	}
 	q.Auth.Required = (resp.StatusCode == http.StatusForbidden)
 	if q.Auth.Required {
 		log.Info("Auth is required")
 	} else {
 		log.Info("Auth is not required")
+	}
+	return err
+}
+
+func (q *Connection) TryToCheckAuth(num_of_retries int) {
+	for i := 0; i < num_of_retries; i++ {
+		err := q.CheckAuth()
+		if err == nil {
+			return
+		} else {
+			log.Error("qBittorrent RPC is not available, error is ", err)
+			if i == num_of_retries-1 {
+				panic(err)
+			} else {
+				time.Sleep(5 * time.Second)
+			}
+		}
 	}
 }
 
