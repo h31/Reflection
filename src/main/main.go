@@ -446,9 +446,15 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success"
 }
 
-func UploadTorrent(metainfo *[]byte, urls *string, destDir *string) {
+func UploadTorrent(metainfo *[]byte, urls *string, destDir *string, paused_optional ...bool) {
 	var buffer bytes.Buffer
 	mime := multipart.NewWriter(&buffer)
+	
+	paused := false
+
+	if len(paused_optional) > 0 {
+		paused = paused_optional[0]
+	}
 
 	if metainfo != nil {
 		mimeWriter, err := mime.CreateFormFile("torrents", "example.torrent")
@@ -466,6 +472,13 @@ func UploadTorrent(metainfo *[]byte, urls *string, destDir *string) {
 		destDirWriter, err := mime.CreateFormField("savepath")
 		Check(err)
 		destDirWriter.Write([]byte(*destDir))
+	}
+	pausedWriter, err := mime.CreateFormField("paused")
+	Check(err)
+	if paused {
+		pausedWriter.Write([]byte("true"))
+	} else {
+		pausedWriter.Write([]byte("false"))
 	}
 	mime.CreateFormField("cookie")
 	mime.CreateFormField("label")
@@ -527,6 +540,17 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 
 	var newHash string
 	var newName string
+	
+	paused := false
+	if req.Paused != nil {
+		if value, ok := (*req.Paused).(float64); ok {
+			// Workaround: Transmission Remote GUI uses a number instead of a boolean
+			paused = value != 0
+		}
+		if value, ok := (*req.Paused).(bool); ok {
+			paused = value
+		}
+	}
 
 	if req.Metainfo != nil {
 		log.Debug("Upload torrent using metainfo")
@@ -534,7 +558,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
 		Check(err)
 		newHash, newName = ParseMetainfo(metainfo)
-		UploadTorrent(&metainfo, nil, req.Download_dir)
+		UploadTorrent(&metainfo, nil, req.Download_dir, paused)
 	} else if req.Filename != nil {
 		path := *req.Filename
 		if strings.HasPrefix(path, "magnet:?") {
@@ -551,7 +575,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 			metainfo := DoGetWithCookies(path, req.Cookies)
 
 			newHash, newName = ParseMetainfo(metainfo)
-			UploadTorrent(&metainfo, nil, nil)
+			UploadTorrent(&metainfo, nil, nil, paused)
 		}
 	}
 
@@ -595,23 +619,6 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		return JsonMap{}, "Torrent-add timeout"
 	}
 
-	paused := false
-	if req.Paused != nil {
-		if value, ok := (*req.Paused).(float64); ok {
-			// Workaround: Transmission Remote GUI uses a number instead of a boolean
-			paused = value != 0
-		}
-		if value, ok := (*req.Paused).(bool); ok {
-			paused = value
-		}
-	}
-	if paused {
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/pause"),
-			url.Values{"hash": {newHash}})
-	} else {
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/resume"),
-			url.Values{"hash": {newHash}})
-	}
 
 	log.WithFields(log.Fields{
 		"hash": newHash,
@@ -670,6 +677,42 @@ func TorrentSet(args json.RawMessage) (JsonMap, string) {
 			}
 			qBTConn.PostForm(qBTConn.MakeRequestURL("/command/setFilePrio"), params)
 		}
+	}
+
+	return JsonMap{}, "success" // TODO
+}
+
+func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
+	var req struct {
+		Ids				*json.RawMessage
+		Location		*string `json: "location"`
+		Move			interface{} `json:"move"`
+	}
+	err := json.Unmarshal(args, &req)
+	Check(err)
+
+	log.Debug("New location: ", *req.Location)
+	if req.Location != nil {
+		ids := parseIDsField(req.Ids)
+		if len(ids) != 1 {
+			log.Error("Unsupported torrent-set-location request")
+			return JsonMap{}, "Unsupported torrent-set-location request"
+		}
+		id := ids[0]
+		
+		/*var move bool // TODO: Move to a function
+		switch val := req.Move.(type) {
+		case bool:
+			move = val
+		case float64:
+			move = (val != 0)
+		}*/
+		
+		params := url.Values{
+			"hashes":   {qBTConn.GetHashForId(id)},
+			"location": {*req.Location},
+		}
+		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/setLocation"), params)
 	}
 
 	return JsonMap{}, "success" // TODO
@@ -737,6 +780,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		resp, result = TorrentAdd(req.Arguments)
 	case "torrent-set":
 		resp, result = TorrentSet(req.Arguments)
+	case "torrent-set-location":
+		resp, result = TorrentSetLocation(req.Arguments)	
 	default:
 		log.Error("Unknown method: ", req.Method)
 	}
