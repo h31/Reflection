@@ -19,6 +19,9 @@ import (
 	"strings"
 	"time"
 	"transmission"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
+	"unicode"
 )
 
 var (
@@ -38,6 +41,8 @@ var deprecatedFields = []string{
 }
 
 var qBTConn qBT.Connection
+var username string
+var password string
 
 func IsFieldDeprecated(field string) bool {
 	for _, value := range deprecatedFields {
@@ -130,7 +135,8 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 		dst[key] = value
 	}
 	dst["hashString"] = src.Hash
-	dst["name"] = src.Name
+	convertedName := AccentRemove(src.Name)
+	dst["name"] = convertedName
 	dst["recheckProgress"] = src.Progress
 	dst["sizeWhenDone"] = src.Size
 	dst["rateDownload"] = src.Dlspeed
@@ -192,8 +198,18 @@ func MakePiecesBitArray(total, have int) string {
 	return base64.StdEncoding.EncodeToString(arr)
 }
 
+func isMn (r rune) bool {
+	return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
+}
+
+func AccentRemove(in string) string {
+    t := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
+    s, _, _ := transform.String(t, in)
+    return s
+}
+
 func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
-	dst["downloadDir"] = propGeneral.Save_path
+	dst["downloadDir"] = AccentRemove(propGeneral.Save_path)
 	dst["pieceSize"] = propGeneral.Piece_size
 	dst["pieceCount"] = propGeneral.Pieces_num
 	dst["addedDate"] = propGeneral.Addition_date
@@ -718,7 +734,7 @@ func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success" // TODO
 }
 
-func Login(username, password string) bool {
+func Login() bool {
 	loginOK := qBTConn.Login(username, password)
 	if loginOK {
 		qBTConn.Auth.Username = username
@@ -732,27 +748,29 @@ func Login(username, password string) bool {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var req transmission.RPCRequest
+	log.Debug("Content-Type ", r.Header.Get("Content-Type"))
+	if len(r.TransferEncoding) > 0 {
+		log.Debug("Encoding ", r.TransferEncoding[0])
+	}
 	reqBody, err := ioutil.ReadAll(r.Body)
 	log.Debug("Got request ", string(reqBody))
 	err = json.Unmarshal(reqBody, &req)
 	Check(err)
 
 	if qBTConn.Auth.Required {
-		username, password, ok := r.BasicAuth()
+		user, pass, ok := r.BasicAuth()
+		username = user;
+		password = pass;
 		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		var authOK = false
-		if !qBTConn.Auth.LoggedIn {
-			authOK = Login(username, password)
-		} else {
-			authOK = (qBTConn.Auth.Username == username) && (qBTConn.Auth.Password == password)
-		}
-		if !authOK {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
+	}
+	var authOK = false
+	authOK = Login()
+	if !authOK {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 
 	var resp JsonMap
