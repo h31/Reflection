@@ -9,10 +9,12 @@ Currently Reflection is able to:
 * Start, stop, delete torrents
 * Add new torrents from a file, a magnet link of an HTTP/HTTPS link
 * Choose which files should be downloaded
+* Change destination directory
+* Show actual free space
 
 Compatibility:
 * Reflection emulates the latest version of Transmission (2.84)
-* Tested against qBittorrent 3.3.1, should work with 3.2.x too.
+* Tested against qBittorrent 4.0.3, should work with older versions too.
 * Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android
 
 What features are not supported yet:
@@ -35,9 +37,4 @@ go build main
 ./main
 ```
 
-Binaries for some popular platforms (Windows, Linux, OS X) can be downloaded from a release page.
-
 Use a `--help` flag to show settings. Default qBittorrent address is `http://localhost:8080/`.
-
-Reflection works best with these qBittorrent settings (can be changed in ~/.config/qBittorrent/qBittorrent.conf):
-* `Downloads\StartInPause=true` - highly recommended for a stable work
