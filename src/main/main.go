@@ -19,8 +19,6 @@ import (
 	"strings"
 	"time"
 	"transmission"
-	"golang.org/x/text/transform"
-	"golang.org/x/text/unicode/norm"
 	"unicode"
 )
 
@@ -135,7 +133,7 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 		dst[key] = value
 	}
 	dst["hashString"] = src.Hash
-	convertedName := AccentRemove(src.Name)
+	convertedName := EscapeString(src.Name)
 	dst["name"] = convertedName
 	dst["recheckProgress"] = src.Progress
 	dst["sizeWhenDone"] = src.Size
@@ -202,14 +200,17 @@ func isMn (r rune) bool {
 	return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
 }
 
-func AccentRemove(in string) string {
-    t := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
-    s, _, _ := transform.String(t, in)
-    return s
+type escapedString string
+func (s escapedString) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.QuoteToASCII(string(s))), nil
+}
+
+func EscapeString(in string) escapedString {
+    return escapedString(in)
 }
 
 func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
-	dst["downloadDir"] = AccentRemove(propGeneral.Save_path)
+	dst["downloadDir"] = EscapeString(propGeneral.Save_path)
 	dst["pieceSize"] = propGeneral.Piece_size
 	dst["pieceCount"] = propGeneral.Pieces_num
 	dst["addedDate"] = propGeneral.Addition_date
