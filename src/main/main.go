@@ -20,6 +20,7 @@ import (
 	"time"
 	"transmission"
 	"unicode"
+	"syscall"
 )
 
 var (
@@ -369,11 +370,23 @@ func FreeSpace(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	path := req["path"]
+	var path string
+	switch v := req["path"].(type) {
+		case string:
+			path=v
+	}
+	size:=uint64(100 * (1 << 30))
+	if path != "" {
+		var stat syscall.Statfs_t
+		syscall.Statfs(path, &stat)
+		size=stat.Bavail * uint64(stat.Bsize)
+	}
+
+	log.Debug("Free space of ", path, ": ", size)
 
 	return JsonMap{
 		"path":       path,
-		"size-bytes": int64(100 * (1 << 30)), // 100 GB
+		"size-bytes": size, // 100 GB
 	}, "success"
 }
 
