@@ -11,6 +11,7 @@ Currently Reflection is able to:
 * Choose which files should be downloaded
 * Change destination directory
 * Show actual free space
+* Show peer table
 
 Compatibility:
 * Reflection emulates the latest version of Transmission (2.84)
@@ -20,7 +21,6 @@ Compatibility:
 What features are not supported yet:
 * Set torrent properties (download/upload speed, etc)
 * Show and change torrent client settings
-* Show peer table
 
 Please note that both qBittorrent and Transmission have some unique features.
 For example, some torrent properties such as a private flag are not exposed by qBittorrent.
