@@ -26,6 +26,20 @@ type TorrentsList struct {
 	Force_start    bool    //	True if force start is enabled for this torrent
 }
 
+type PeerInfo struct {
+	Up_speed		int
+	Uploaded		int64
+	Down_speed		int
+	Port			int
+	Downloaded		int64
+	Client			string
+	Country			string
+	Flags			string
+	IP				string
+	Progress		float64 //	Torrent progress (percentage/100)
+}
+
+
 type PropertiesGeneral struct {
 	Save_path                string  //	Torrent save path
 	Creation_date            int64   //	Torrent creation date (Unix timestamp)
@@ -144,16 +158,16 @@ type Preferences struct {
 	Encryption                     int         //	See list of possible values here below
 	Anonymous_mode                 bool        //	If true anonymous mode will be enabled; read more here; this option is only available in qBittorent built against libtorrent version 0.16.X and higher
 	Proxy_type                     int         //	See list of possible values here below
-	Proxy_ip                       string      //	Proxy IP address or domain name
+	Proxy_ip                       string      //	Proxy Address address or domain name
 	Proxy_port                     int         //	Proxy port
 	Proxy_peer_connections         bool        //	True if peer and web seed connections should be proxified; this option will have any effect only in qBittorent built against libtorrent version 0.16.X and higher
 	Force_proxy                    bool        //	True if the connections not supported by the proxy are disabled
 	Proxy_auth_enabled             bool        //	True proxy requires authentication; doesn't apply to SOCKS4 proxies
 	Proxy_username                 string      //	Username for proxy authentication
 	Proxy_password                 string      //	Password for proxy authentication
-	Ip_filter_enabled              bool        //	True if external IP filter should be enabled
-	Ip_filter_path                 string      //	Path to IP filter file (.dat, .p2p, .p2b files are supported); path is separated by slashes
-	Ip_filter_trackers             bool        //	True if IP filters are applied to trackers
+	Ip_filter_enabled              bool        //	True if external Address filter should be enabled
+	Ip_filter_path                 string      //	Path to Address filter file (.dat, .p2p, .p2b files are supported); path is separated by slashes
+	Ip_filter_trackers             bool        //	True if Address filters are applied to trackers
 	Web_ui_port                    int         //	WebUI port
 	Web_ui_upnp                    bool        //	True if UPnP is used for the WebUI port
 	Web_ui_username                string      //	WebUI username

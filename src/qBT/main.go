@@ -73,12 +73,11 @@ func (q *Connection) GetTorrentList() (resp []TorrentsList) {
 	return
 }
 
-func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
+func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral, err error) {
 	propGeneralURL := q.MakeRequestURL("/query/propertiesGeneral/" + q.GetHashForId(id))
 	propGeneralRaw := q.DoGET(propGeneralURL)
 
-	err := json.Unmarshal(propGeneralRaw, &propGeneral)
-	checkAndLog(err, propGeneralRaw)
+	err = json.Unmarshal(propGeneralRaw, &propGeneral)
 	return
 }
 
@@ -87,6 +86,7 @@ func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
 	trackersRaw := q.DoGET(trackersURL)
 
 	err := json.Unmarshal(trackersRaw, &trackers)
+
 	checkAndLog(err, trackersRaw)
 	return
 }
@@ -156,7 +156,11 @@ func (q *Connection) PostForm(url string, data url.Values) []byte {
 }
 
 func (q *Connection) GetHashForId(id int) string {
-	return q.HashIds[id-1]
+	if (len(q.HashIds) >= id) {
+		return q.HashIds[id-1]
+	} else {
+		return "a"
+	}
 }
 
 func (q *Connection) GetHashNum() int {

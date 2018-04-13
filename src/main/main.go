@@ -21,6 +21,7 @@ import (
 	"transmission"
 	"unicode"
 	"syscall"
+	"hash/fnv"
 )
 
 var (
@@ -124,11 +125,7 @@ func parseActionArgument(args json.RawMessage) []string {
 
 func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	var src qBT.TorrentsList
-	for _, value := range torrentsList {
-		if value.Hash == qBTConn.GetHashForId(id) {
-			src = value
-		}
-	}
+	src = getTorrentById(torrentsList, id)
 
 	for key, value := range transmission.TorrentGetBase {
 		dst[key] = value
@@ -142,41 +139,70 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["rateUpload"] = src.Upspeed
 	dst["uploadRatio"] = src.Ratio
 	dst["eta"] = src.Eta
-	switch src.State {
-	case "pausedUP", "pausedDL":
-		dst["status"] = 0 // TR_STATUS_STOPPED
-	case "checkingUP", "checkingDL":
-		dst["status"] = 2 // TR_STATUS_CHECK
-	case "queuedDL":
-		dst["status"] = 3 // TR_STATUS_DOWNLOAD_WAIT
-	case "downloading", "stalledDL":
-		dst["status"] = 4 // TR_STATUS_DOWNLOAD
-	case "queuedUP":
-		dst["status"] = 5 // TR_STATUS_SEED_WAIT
-	case "uploading", "stalledUP":
-		dst["status"] = 6 // TR_STATUS_SEED
-	case "error":
-		dst["status"] = 0 // TR_STATUS_STOPPED
-	default:
-		dst["status"] = 0 // TR_STATUS_STOPPED
-	}
-	if src.State == "error" {
-		dst["error"] = 3 // TR_STAT_LOCAL_ERROR
-	} else {
-		dst["error"] = 0 // TR_STAT_OK
-	}
-	switch src.State {
-	case "stalledDL", "stalledUP":
-		dst["isStalled"] = true
-	default:
-		dst["isStalled"] = false
-	}
+	dst["status"] = qBTStateToTransmissionStatus(src.State)
+	dst["error"] = qBTStateToTransmissionError(src.State)
+	dst["isStalled"] = qBTStateToTransmissionStalled(src.State)
 	dst["percentDone"] = src.Progress
 	dst["peersGettingFromUs"] = src.Num_leechs
 	dst["peersSendingToUs"] = src.Num_seeds
 	dst["leftUntilDone"] = float64(src.Size) * (1 - src.Progress)
 	dst["desiredAvailable"] = float64(src.Size) * (1 - src.Progress) // TODO
 	dst["haveUnchecked"] = 0                                         // TODO
+}
+
+func getTorrentById(torrentsList []qBT.TorrentsList, id int) (src qBT.TorrentsList) {
+	for _, value := range torrentsList {
+		if value.Hash == qBTConn.GetHashForId(id) {
+			src = value
+		}
+	}
+	return
+}
+
+const TR_STAT_OK = 0
+const TR_STATUS_LOCAL_ERROR = 3
+func qBTStateToTransmissionError(state string) int {
+	if state == "error" {
+		return TR_STATUS_LOCAL_ERROR // TR_STAT_LOCAL_ERROR
+	} else {
+		return TR_STAT_OK // TR_STAT_OK
+	}
+}
+
+func qBTStateToTransmissionStalled(state string) bool {
+	switch state {
+	case "stalledDL", "stalledUP":
+		return true
+	default:
+		return false
+	}
+}
+
+const TR_STATUS_STOPPED = 0
+const TR_STATUS_CHECK = 2
+const TR_STATUS_DOWNLOAD_WAIT = 3
+const TR_STATUS_DOWNLOAD = 4
+const TR_STATUS_SEED_WAIT = 5
+const TR_STATUS_SEED = 6
+func qBTStateToTransmissionStatus(state string) (int) {
+	switch state {
+	case "pausedUP", "pausedDL":
+		return TR_STATUS_STOPPED // TR_STATUS_STOPPED
+	case "checkingUP", "checkingDL":
+		return TR_STATUS_CHECK // TR_STATUS_CHECK
+	case "queuedDL":
+		return TR_STATUS_DOWNLOAD_WAIT // TR_STATUS_DOWNLOAD_WAIT
+	case "downloading", "stalledDL":
+		return TR_STATUS_DOWNLOAD // TR_STATUS_DOWNLOAD
+	case "queuedUP":
+		return TR_STATUS_SEED_WAIT // TR_STATUS_SEED_WAIT
+	case "uploading", "stalledUP":
+		return TR_STATUS_SEED // TR_STATUS_SEED
+	case "error":
+		return TR_STATUS_STOPPED // TR_STATUS_STOPPED
+	default:
+		return TR_STATUS_STOPPED // TR_STATUS_STOPPED
+	}
 }
 
 func MakePiecesBitArray(total, have int) string {
@@ -248,14 +274,50 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["peer-limit"] = propGeneral.Nb_connections_limit // TODO: What's it?
 }
 
-func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
+func MapPropsPeers(dst JsonMap, hash string) {
+	url := qBTConn.MakeRequestURLWithParam("/sync/torrent_peers", map[string]string{"hash": hash, "rid": "0"})
+	torrents := qBTConn.DoGET(url)
+
+	log.Debug(string(torrents))
+	var resp struct {
+		//Peers map[string]qBT.PeerInfo
+		Peers map[string]qBT.PeerInfo
+	}
+	err := json.Unmarshal(torrents, &resp)
+	Check(err)
+	//var trPeers []transmission.PeerInfo
+	trPeers := make([]transmission.PeerInfo,0)
+
+	for _ ,peer := range resp.Peers {
+		clientName,_ := EscapeString(peer.Client).MarshalJSON()
+		country,_ := EscapeString(peer.Country).MarshalJSON()
+		trPeers = append(trPeers, transmission.PeerInfo{
+					RateToPeer:   peer.Down_speed,
+					RateToClient: peer.Up_speed,
+					ClientName:   string(clientName),
+					FlagStr:      peer.Flags,
+					Country:      string(country),
+					Address:      peer.IP,
+					Progress:     peer.Progress,
+					Port:         peer.Port,
+				})
+	}
+
+	dst["peers"] = trPeers
+}
+
+
+func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers, propGeneral qBT.PropertiesGeneral) {
 	trackersList := make([]JsonMap, len(trackers))
 	trackerStats := make([]JsonMap, len(trackers))
 
 	for i, value := range trackers {
+		h := fnv.New32a();
+		h.Write([]byte(value.Url))
+		id := h.Sum32()
 		trackersList[i] = make(JsonMap)
 		trackersList[i]["announce"] = value.Url
-		trackersList[i]["id"] = i // TODO
+		trackersList[i]["id"] = id
 		trackersList[i]["scrape"] = value.Url
 		trackersList[i]["tier"] = 0 // TODO
 
@@ -264,7 +326,12 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 			trackerStats[i][key] = value
 		}
 		trackerStats[i]["announce"] = value.Url
-		trackerStats[i]["id"] = i // TODO
+		trackerStats[i]["host"] = value.Url
+		trackerStats[i]["leecherCount"] = propGeneral.Peers_total
+		trackerStats[i]["seederCount"] = propGeneral.Seeds_total
+		trackerStats[i]["downloadCount"] = propGeneral.Seeds_total
+		trackerStats[i]["lastAnnouncePeerCount"] = propGeneral.Peers_total
+		trackerStats[i]["id"] = id
 		trackerStats[i]["scrape"] = ""
 		trackerStats[i]["tier"] = 0 // TODO
 	}
@@ -323,14 +390,19 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	resultList := make([]JsonMap, len(ids))
 	for i, id := range ids {
 		translated := make(JsonMap)
-		propGeneral := qBTConn.GetPropsGeneral(id)
+		propGeneral, err := qBTConn.GetPropsGeneral(id)
+		if err != nil {
+			log.Error("General property error: ", err)
+			continue
+		}
 		trackers := qBTConn.GetPropsTrackers(id)
 		files := qBTConn.GetPropsFiles(id)
 
 		MapTorrentList(translated, torrentList, id)
 		MapPropsGeneral(translated, propGeneral)
-		MapPropsTrackers(translated, trackers)
+		MapPropsTrackers(translated, trackers, propGeneral)
 		MapPropsFiles(translated, files)
+		MapPropsPeers(translated, qBTConn.GetHashForId(id))
 
 		translated["id"] = id
 		for _, field := range fields {
@@ -348,7 +420,19 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		}
 		resultList[i] = translated
 	}
+	log.Debug("torrents: ",resultList)
 	return JsonMap{"torrents": resultList}, "success"
+}
+
+func qBTEncryptionToTR(enc int) (res string) {
+	switch enc {
+	case 0:
+		return "preferred"
+	case 1:
+		return "required"
+	default:
+		return "tolerated"
+	}
 }
 
 func SessionGet() (JsonMap, string) {
@@ -358,6 +442,39 @@ func SessionGet() (JsonMap, string) {
 	}
 
 	prefs := qBTConn.GetPreferences()
+	session["download-dir"] = prefs.Save_path
+	session["speed-limit-down"] = prefs.Dl_limit
+	session["speed-limit-up"] = prefs.Up_limit
+	if prefs.Dl_limit == -1 {
+		session["speed-limit-down-enabled"] = false
+	} else {
+		session["speed-limit-down-enabled"] = true
+	}
+
+	if prefs.Up_limit == -1 {
+		session["speed-limit-up-enabled"] = false
+	} else {
+		session["speed-limit-up-enabled"] = true
+	}
+
+	session["peer-limit-global"] = prefs.Max_connec
+	session["peer-limit-per-torrent"] = prefs.Max_connec_per_torrent
+	session["peer-port"] = prefs.Listen_port
+	session["seedRatioLimit"] = prefs.Max_ratio
+	session["seedRatioLimitEd"] = prefs.Max_ratio_act
+	session["peer-port-random-on-start"] = prefs.Random_port
+	session["port-forwarding-enabled"] = prefs.Upnp
+	session["utp-enabled"] = prefs.Enable_utp
+	session["dht-enabled"] = prefs.Dht
+	session["incomplete-dir"] = prefs.Temp_path
+	session["incomplete-dir-enabled"] = prefs.Temp_path_enabled
+	session["lpd-enabled"] = prefs.Lsd
+	session["pex-enabled"] = prefs.Pex
+	session["encryption"] = qBTEncryptionToTR(prefs.Encryption)
+	session["download-queue-size"] = prefs.Max_active_downloads
+	session["seed-queue-size"] = prefs.Max_active_uploads
+	session["download-queue-enabled"] = prefs.Queueing_enabled
+	session["seed-queue-enabled"] = prefs.Queueing_enabled
 	session["download-dir"] = prefs.Save_path
 
 	version := qBTConn.GetVersion()
@@ -396,11 +513,50 @@ func SessionStats() (JsonMap, string) {
 		session[key] = value
 	}
 
+	torrentList := qBTConn.GetTorrentList()
+
+	if qBTConn.GetHashNum() == 0 {
+		qBTConn.FillIDs(torrentList)
+		log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
+	}
+
+	ids := parseIDsArgument(nil)
+	
+	paused := 0
+	active := 0
+	all := 0
+	timeElapsed  := 0
+	
+	for _,id := range ids {
+		torrent := getTorrentById(torrentList,id)
+		propGeneral, err := qBTConn.GetPropsGeneral(id)
+		if err != nil {
+			log.Error("General property error: ", err)
+			continue
+		}
+
+		if propGeneral.Time_elapsed > timeElapsed {
+			timeElapsed=propGeneral.Time_elapsed
+		}
+
+		if qBTStateToTransmissionStatus(torrent.State) == TR_STATUS_STOPPED {
+			paused++
+		} else {
+			active++
+		}
+		all++
+		
+	}
+
 	info := qBTConn.GetTransferInfo()
+	session["activeTorrentCount"] = active
+	session["pausedTorrentCount"] = paused
+	session["torrentCount"] = all
 	session["downloadSpeed"] = info.Dl_info_speed
 	session["uploadSpeed"] = info.Up_info_speed
 	session["current-stats"].(map[string]int64)["downloadedBytes"] = info.Dl_info_data
 	session["current-stats"].(map[string]int64)["uploadedBytes"] = info.Up_info_data
+	session["current-stats"].(map[string]int64)["secondsActive"] = int64(timeElapsed)
 	session["cumulative-stats"] = session["current-stats"]
 	return session, "success"
 }
@@ -762,10 +918,13 @@ func Login() bool {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var req transmission.RPCRequest
-	log.Debug("Content-Type ", r.Header.Get("Content-Type"))
-	if len(r.TransferEncoding) > 0 {
-		log.Debug("Encoding ", r.TransferEncoding[0])
-	}
+	/*defer func() {
+		if r := recover(); r != nil {
+			log.Debug("Recovered in f, sending 404. Error: ", r)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	}()*/
 	reqBody, err := ioutil.ReadAll(r.Body)
 	log.Debug("Got request ", string(reqBody))
 	err = json.Unmarshal(reqBody, &req)
