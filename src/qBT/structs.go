@@ -133,8 +133,8 @@ type Preferences struct {
 	Listen_port                    int         //	Port for incoming connections
 	Upnp                           bool        //	True if UPnP/NAT-PMP is enabled
 	Random_port                    bool        //	True if the port is randomly selected
-	Dl_limit                       int         //	Global download speed limit in KiB/s; -1means no limit is applied
-	Up_limit                       int         //	Global upload speed limit in KiB/s; -1means no limit is applied
+	Dl_limit                       int         //	Global download speed limit in B/s; -1means no limit is applied
+	Up_limit                       int         //	Global upload speed limit in B/s; -1means no limit is applied
 	Max_connec                     int         //	Maximum global number of simultaneous connections
 	Max_connec_per_torrent         int         //	Maximum number of simultaneous connections per torrent
 	Max_uploads                    int         //	Maximum number of upload slots

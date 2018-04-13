@@ -443,8 +443,8 @@ func SessionGet() (JsonMap, string) {
 
 	prefs := qBTConn.GetPreferences()
 	session["download-dir"] = prefs.Save_path
-	session["speed-limit-down"] = prefs.Dl_limit
-	session["speed-limit-up"] = prefs.Up_limit
+	session["speed-limit-down"] = prefs.Dl_limit/1024
+	session["speed-limit-up"] = prefs.Up_limit/1024
 	if prefs.Dl_limit == -1 {
 		session["speed-limit-down-enabled"] = false
 	} else {
