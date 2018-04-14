@@ -26,6 +26,14 @@ Please note that both qBittorrent and Transmission have some unique features.
 For example, some torrent properties such as a private flag are not exposed by qBittorrent.
 In case Transmission clients request such information, Reflection responds with a predefined template data. Template values are stored in src/transmission/templates.go.
 
+Please set qBitorrent to English language for best experience! You can set this in qBittorrent.conf under Preferences section:
+
+```
+[Preferences]
+...
+General\Locale=en_US
+```
+
 ## Usage:
 
 ```bash
