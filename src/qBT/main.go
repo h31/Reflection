@@ -123,8 +123,8 @@ func (q *Connection) GetPropsFiles(id int) (files []PropertiesFiles) {
 	return
 }
 
-func (q *Connection) DoGET(url string) []byte {
-	req, err := http.NewRequest("GET", url, nil)
+func (q *Connection) DoGET(lurl string) []byte {
+	req, err := http.NewRequest("GET", lurl, nil)
 	if q.Auth.Required {
 		req.AddCookie(&q.Auth.Cookie)
 	}

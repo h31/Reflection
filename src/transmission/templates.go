@@ -75,12 +75,9 @@ var TorrentGetBase = JsonMap{
 
 var TrackerStatsTemplate = JsonMap{
 	"announceState":         0,
-	"hasAnnounced":          true,
 	"hasScraped":            false,
 	"isBackup":              false,
-	"lastAnnounceResult":    "",
 	"lastAnnounceStartTime": 0,
-	"lastAnnounceSucceeded": true,
 	"lastAnnounceTime":      0,
 	"lastAnnounceTimedOut":  false,
 	"lastScrapeResult":      "",

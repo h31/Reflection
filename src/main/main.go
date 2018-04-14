@@ -331,6 +331,9 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers, propGenera
 		trackerStats[i]["seederCount"] = propGeneral.Seeds_total
 		trackerStats[i]["downloadCount"] = propGeneral.Seeds_total
 		trackerStats[i]["lastAnnouncePeerCount"] = propGeneral.Peers_total
+		trackerStats[i]["lastAnnounceResult"] = value.Status
+		trackerStats[i]["lastAnnounceSucceeded"] = value.Status == "Working"
+		trackerStats[i]["hasAnnounced"] = value.Status == "Working"
 		trackerStats[i]["id"] = id
 		trackerStats[i]["scrape"] = ""
 		trackerStats[i]["tier"] = 0 // TODO
@@ -461,7 +464,7 @@ func SessionGet() (JsonMap, string) {
 	session["peer-limit-per-torrent"] = prefs.Max_connec_per_torrent
 	session["peer-port"] = prefs.Listen_port
 	session["seedRatioLimit"] = prefs.Max_ratio
-	session["seedRatioLimitEd"] = prefs.Max_ratio_act
+	session["seedRatioLimited"] = prefs.Max_ratio_act
 	session["peer-port-random-on-start"] = prefs.Random_port
 	session["port-forwarding-enabled"] = prefs.Upnp
 	session["utp-enabled"] = prefs.Enable_utp
