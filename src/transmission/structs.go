@@ -2,10 +2,6 @@ package transmission
 
 import (
 	"encoding/json"
-	"bytes"
-	"reflect"
-	"fmt"
-	"strings"
 )
 
 type RPCRequest struct {
@@ -35,35 +31,12 @@ type TorrentAddRequest struct {
 }
 
 type PeerInfo struct {
-	RateToPeer   int
-	RateToClient int
-	Port         int
-	ClientName   interface{}
-	FlagStr      string
-	Country      interface{}
-	Address      string
-	Progress     float64 //	Torrent progress (percentage/100)
-}
-
-func (p *PeerInfo) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString("{")
-	peerType := reflect.TypeOf(*p)
-	peerValue := reflect.ValueOf(*p)
-	for i:=0; i<peerType.NumField(); i++ {
-		name := []byte(peerType.Field(i).Name)
-		name[0] = strings.ToLower(string(name[0]))[0]
-		buffer.WriteString(fmt.Sprint("\"", string(name), "\": "))
-		if peerValue.Field(i).Kind() == reflect.String {
-			buffer.WriteString("\"")
-		}
-		buffer.WriteString(fmt.Sprint(peerValue.Field(i).Interface()))
-		if peerValue.Field(i).Kind() == reflect.String {
-			buffer.WriteString("\"")
-		}
-		if i < peerType.NumField()-1 {
-			buffer.WriteString(",")
-		}
-	}
-	buffer.WriteString("}")
-	return buffer.Bytes(), nil
+	RateToPeer   int			`json:"rateToPeer"`
+	RateToClient int			`json:"rateToClient"`
+	Port         int			`json:"port"`
+	ClientName   interface{}	`json:"clientName"`
+	FlagStr      string			`json:"flagStr"`
+	Country      interface{}	`json:"country"`
+	Address      string			`json:"address"`
+	Progress     float64 		`json:"progress"`		//	Torrent progress (percentage/100)
 }

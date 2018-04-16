@@ -289,14 +289,14 @@ func MapPropsPeers(dst JsonMap, hash string) {
 	trPeers := make([]transmission.PeerInfo,0)
 
 	for _ ,peer := range resp.Peers {
-		clientName,_ := EscapeString(peer.Client).MarshalJSON()
-		country,_ := EscapeString(peer.Country).MarshalJSON()
+		clientName := EscapeString(peer.Client)
+		country := EscapeString(peer.Country)
 		trPeers = append(trPeers, transmission.PeerInfo{
 					RateToPeer:   peer.Down_speed,
 					RateToClient: peer.Up_speed,
-					ClientName:   string(clientName),
+					ClientName:   clientName,
 					FlagStr:      peer.Flags,
-					Country:      string(country),
+					Country:      country,
 					Address:      peer.IP,
 					Progress:     peer.Progress,
 					Port:         peer.Port,
@@ -423,7 +423,6 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		}
 		resultList[i] = translated
 	}
-	log.Debug("torrents: ",resultList)
 	return JsonMap{"torrents": resultList}, "success"
 }
 
@@ -988,6 +987,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 	respBody, err := json.Marshal(response)
 	Check(err)
+	log.Debug("respBody: ", string(respBody))
 	w.Header().Set("Content-Length", strconv.Itoa(len(respBody)))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Write(respBody)
