@@ -382,7 +382,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 
 	torrentList := qBTConn.GetTorrentList()
 
-	if qBTConn.GetHashNum() == 0 {
+	if qBTConn.GetHashNum() == 0 || qBTConn.GetHashNum() != len(torrentList){
 		qBTConn.FillIDs(torrentList)
 		log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
 	}
@@ -396,6 +396,8 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		propGeneral, err := qBTConn.GetPropsGeneral(id)
 		if err != nil {
 			log.Error("General property error: ", err)
+			qBTConn.FillIDs(torrentList)
+			log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
 			continue
 		}
 		trackers := qBTConn.GetPropsTrackers(id)
@@ -408,12 +410,17 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		MapPropsPeers(translated, qBTConn.GetHashForId(id))
 
 		translated["id"] = id
+		e := false
 		for _, field := range fields {
 			if _, ok := translated[field]; !ok {
 				if !IsFieldDeprecated(field) {
 					log.Error("Unsupported field: ", field)
+					e = true
 				}
 			}
+		}
+		if e {
+			continue;
 		}
 		for key := range translated {
 			if !Any(fields, key) {
