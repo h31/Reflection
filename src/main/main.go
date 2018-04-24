@@ -380,12 +380,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	torrentList := qBTConn.GetTorrentList()
-
-	if qBTConn.GetHashNum() == 0 || qBTConn.GetHashNum() != len(torrentList){
-		qBTConn.FillIDs(torrentList)
-		log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
-	}
+	torrentList,_ := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(req.Ids)
 	fields := req.Fields
@@ -396,8 +391,6 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		propGeneral, err := qBTConn.GetPropsGeneral(id)
 		if err != nil {
 			log.Error("General property error: ", err)
-			qBTConn.FillIDs(torrentList)
-			log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
 			continue
 		}
 		trackers := qBTConn.GetPropsTrackers(id)
@@ -522,12 +515,7 @@ func SessionStats() (JsonMap, string) {
 		session[key] = value
 	}
 
-	torrentList := qBTConn.GetTorrentList()
-
-	if qBTConn.GetHashNum() == 0 {
-		qBTConn.FillIDs(torrentList)
-		log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
-	}
+	torrentList,_ := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(nil)
 	
@@ -730,8 +718,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	torrentList := qBTConn.GetTorrentList()
-	qBTConn.FillIDs(torrentList)
+	qBTConn.GetTorrentList()
 
 	var newHash string
 	var newName string
@@ -793,8 +780,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	for retries := 0; retries < 100; retries++ {
 		time.Sleep(50 * time.Millisecond)
 
-		torrentList := qBTConn.GetTorrentList()
-		newHashes := qBTConn.FillIDs(torrentList)
+		_, newHashes := qBTConn.GetTorrentList()
 		if len(newHashes) > 0 {
 			log.WithFields(log.Fields{
 				"hashes": newHashes,

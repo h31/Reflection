@@ -64,12 +64,17 @@ func (q *Connection) MakeRequestURL(path string) string {
 	return q.MakeRequestURLWithParam(path, map[string]string{})
 }
 
-func (q *Connection) GetTorrentList() (resp []TorrentsList) {
+func (q *Connection) GetTorrentList() (resp []TorrentsList, newHashes []string) {
 	url := q.MakeRequestURLWithParam("/query/torrents", map[string]string{"sort": "hash"})
 	torrents := q.DoGET(url)
 
 	err := json.Unmarshal(torrents, &resp)
 	checkAndLog(err, torrents)
+
+	if q.GetHashNum() == 0 || q.GetHashNum() != len(resp){
+		newHashes = q.FillIDs(resp)
+		log.Debug("Filling IDs table, new size: ", q.GetHashNum())
+	}
 	return
 }
 
@@ -241,15 +246,14 @@ func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
 			if FindInArray(q.HashIds, torrent.Hash) == false {
 				log.Debug("Received new hash ", torrent.Hash)
 				newHashes = append(newHashes, torrent.Hash)
-				q.HashIds = append(q.HashIds, torrent.Hash)
 			}
 		}
-	} else {
-		q.HashIds = make([]string, len(torrentsList))
+	}
+	// Refill the table completely to handle removed hashes
+	q.HashIds = make([]string, len(torrentsList))
 
-		for key, value := range torrentsList {
-			q.HashIds[key] = value.Hash
-		}
+	for key, value := range torrentsList {
+		q.HashIds[key] = value.Hash
 	}
 	return
 }
