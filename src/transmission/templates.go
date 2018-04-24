@@ -57,7 +57,6 @@ var TorrentGetBase = JsonMap{
 	"errorString":             "",
 	"metadataPercentComplete": 1,
 	"isFinished":              false,
-	"queuePosition":           0, // Looks like not supported by qBittorent
 	"seedRatioLimit":          2,
 	"seedRatioMode":           0, // No local limits in qBittorrent
 	"activityDate":            1443977197,
