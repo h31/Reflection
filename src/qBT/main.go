@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"hash/fnv"
 )
 
 func check(e error) {
@@ -42,7 +41,7 @@ type Auth struct {
 type Connection struct {
 	Addr string
 	// Hash to ID map. Array index is an ID
-	HashIds map[int]string
+	HashIds []string
 	Tr      *http.Transport
 	Client  *http.Client
 	Auth    Auth
@@ -66,7 +65,7 @@ func (q *Connection) MakeRequestURL(path string) string {
 }
 
 func (q *Connection) GetTorrentList() (resp []TorrentsList, newHashes []string) {
-	url := q.MakeRequestURLWithParam("/query/torrents", map[string]string{"sort": "added_on"})
+	url := q.MakeRequestURLWithParam("/query/torrents", map[string]string{"sort": "hash"})
 	torrents := q.DoGET(url)
 
 	err := json.Unmarshal(torrents, &resp)
@@ -182,7 +181,7 @@ func (q *Connection) GetIdOfHash(hash string) (int, error) {
 	return 0, errors.New("No such hash")
 }
 
-func FindInArray(array map[int]string, item string) bool {
+func FindInArray(array []string, item string) bool {
 	for _, value := range array {
 		if value == item {
 			return true
@@ -240,13 +239,6 @@ func (q *Connection) Login(username, password string) bool {
 	return authOK
 }
 
-func (q *Connection) MakeIDFromHash(hash string) (id int) {
-	h := fnv.New32a();
-	h.Write([]byte(hash))
-	id = int(h.Sum32())
-	return
-}
-
 func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
 	if len(q.HashIds) > 0 {
 		// HashIDs already filled
@@ -254,28 +246,14 @@ func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
 			if FindInArray(q.HashIds, torrent.Hash) == false {
 				log.Debug("Received new hash ", torrent.Hash)
 				newHashes = append(newHashes, torrent.Hash)
-				q.HashIds[q.MakeIDFromHash(torrent.Hash)] = torrent.Hash
 			}
 		}
+	}
+	// Refill the table completely to handle removed hashes
+	q.HashIds = make([]string, len(torrentsList))
 
-		newHashIdMap := make(map[int]string,len(torrentsList))
-
-		for id, hash := range q.HashIds {
-			for _, torrent := range torrentsList {
-				if torrent.Hash == hash {
-					newHashIdMap[id]=hash
-					break
-				}
-			}
-		}
-		q.HashIds=newHashIdMap
-	} else {
-		// Refill the table completely to handle removed hashes
-		q.HashIds = make(map[int]string, len(torrentsList))
-
-		for key, value := range torrentsList {
-			q.HashIds[key] = value.Hash
-		}
+	for key, value := range torrentsList {
+		q.HashIds[key] = value.Hash
 	}
 	return
 }

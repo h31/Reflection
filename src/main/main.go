@@ -21,6 +21,7 @@ import (
 	"transmission"
 	"unicode"
 	"syscall"
+	"hash/fnv"
 )
 
 var (
@@ -311,7 +312,9 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers, propGenera
 	trackerStats := make([]JsonMap, len(trackers))
 
 	for i, value := range trackers {
-		id := qBTConn.MakeIDFromHash(value.Url)
+		h := fnv.New32a();
+		h.Write([]byte(value.Url))
+		id := h.Sum32()
 		trackersList[i] = make(JsonMap)
 		trackersList[i]["announce"] = value.Url
 		trackersList[i]["id"] = id
@@ -400,15 +403,18 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		MapPropsPeers(translated, qBTConn.GetHashForId(id))
 
 		translated["id"] = id
-		translated["queuePosition"] = i+1
+		e := false
 		for _, field := range fields {
 			if _, ok := translated[field]; !ok {
 				if !IsFieldDeprecated(field) {
-					log.Debug("Unsupported field: ", field)
+					log.Error("Unsupported field: ", field)
+					e = true
 				}
 			}
 		}
-		
+		if e {
+			continue;
+		}
 		for key := range translated {
 			if !Any(fields, key) {
 				// Remove unneeded fields
