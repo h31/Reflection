@@ -41,6 +41,7 @@ type Auth struct {
 type Connection struct {
 	Addr string
 	// Hash to ID map. Array index is an ID
+	lastId int
 	HashIds []string
 	Tr      *http.Transport
 	Client  *http.Client
@@ -181,14 +182,6 @@ func (q *Connection) GetIdOfHash(hash string) (int, error) {
 	return 0, errors.New("No such hash")
 }
 
-func FindInArray(array []string, item string) bool {
-	for _, value := range array {
-		if value == item {
-			return true
-		}
-	}
-	return false
-}
 
 func (q *Connection) CheckAuth() error {
 	requestURL := q.MakeRequestURL("/query/torrents")
@@ -240,20 +233,11 @@ func (q *Connection) Login(username, password string) bool {
 }
 
 func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
-	if len(q.HashIds) > 0 {
-		// HashIDs already filled
-		for _, torrent := range torrentsList {
-			if FindInArray(q.HashIds, torrent.Hash) == false {
-				log.Debug("Received new hash ", torrent.Hash)
-				newHashes = append(newHashes, torrent.Hash)
-			}
-		}
-	}
-	// Refill the table completely to handle removed hashes
-	q.HashIds = make([]string, len(torrentsList))
+		// Refill the table completely to handle removed hashes
+		q.HashIds = make([]string, len(torrentsList))
 
-	for key, value := range torrentsList {
-		q.HashIds[key] = value.Hash
-	}
+		for key, value := range torrentsList {
+			q.HashIds[key] = value.Hash
+		}
 	return
 }

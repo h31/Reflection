@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -355,7 +354,8 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 
 		files[i]["bytesCompleted"] = float64(value.Size) * value.Progress
 		files[i]["length"] = value.Size
-		files[i]["name"] = value.Name
+		convertedName := EscapeString(value.Name)
+		files[i]["name"] = convertedName
 
 		fileStats[i]["bytesCompleted"] = float64(value.Size) * value.Progress
 		if value.Priority == 0 {
@@ -403,6 +403,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		MapPropsPeers(translated, qBTConn.GetHashForId(id))
 
 		translated["id"] = id
+		translated["queuePosition"] = i+1
 		e := false
 		for _, field := range fields {
 			if _, ok := translated[field]; !ok {
@@ -704,14 +705,6 @@ func ParseMetainfo(metainfo []byte) (newHash, newName string) {
 	return
 }
 
-func GetIdOfNewHash(newHashes []string, newHash string) (int, error) {
-	for _, hash := range newHashes {
-		if hash == newHash {
-			return qBTConn.GetIdOfHash(newHash)
-		}
-	}
-	return -1, errors.New("Hash not found")
-}
 
 func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	var req transmission.TorrentAddRequest
@@ -787,7 +780,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 			}).Debug("New hashes")
 		}
 
-		newId, err = GetIdOfNewHash(newHashes, newHash)
+		newId, err = qBTConn.GetIdOfHash(newHash)
 		if err == nil {
 			log.Debug("Found ID ", newId)
 			break
