@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -367,7 +366,8 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 
 		files[i]["bytesCompleted"] = float64(value.Size) * value.Progress
 		files[i]["length"] = value.Size
-		files[i]["name"] = value.Name
+		convertedName := EscapeString(value.Name)
+		files[i]["name"] = convertedName
 
 		fileStats[i]["bytesCompleted"] = float64(value.Size) * value.Progress
 		if value.Priority == 0 {
@@ -392,12 +392,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	torrentList := qBTConn.GetTorrentList()
-
-	if qBTConn.GetHashNum() == 0 {
-		qBTConn.FillIDs(torrentList)
-		log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
-	}
+	torrentList,_ := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(req.Ids)
 	fields := req.Fields
@@ -420,12 +415,18 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		MapPropsPeers(translated, qBTConn.GetHashForId(id))
 
 		translated["id"] = id
+		translated["queuePosition"] = i+1
+		e := false
 		for _, field := range fields {
 			if _, ok := translated[field]; !ok {
 				if !IsFieldDeprecated(field) {
 					log.Error("Unsupported field: ", field)
+					e = true
 				}
 			}
+		}
+		if e {
+			continue;
 		}
 		for key := range translated {
 			if !Any(fields, key) {
@@ -527,12 +528,7 @@ func SessionStats() (JsonMap, string) {
 		session[key] = value
 	}
 
-	torrentList := qBTConn.GetTorrentList()
-
-	if qBTConn.GetHashNum() == 0 {
-		qBTConn.FillIDs(torrentList)
-		log.Debug("Filling IDs table, new size: ", qBTConn.GetHashNum())
-	}
+	torrentList,_ := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(nil)
 	
@@ -721,22 +717,13 @@ func ParseMetainfo(metainfo []byte) (newHash, newName string) {
 	return
 }
 
-func GetIdOfNewHash(newHashes []string, newHash string) (int, error) {
-	for _, hash := range newHashes {
-		if hash == newHash {
-			return qBTConn.GetIdOfHash(newHash)
-		}
-	}
-	return -1, errors.New("Hash not found")
-}
 
 func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	var req transmission.TorrentAddRequest
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	torrentList := qBTConn.GetTorrentList()
-	qBTConn.FillIDs(torrentList)
+	qBTConn.GetTorrentList()
 
 	var newHash string
 	var newName string
@@ -798,15 +785,14 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	for retries := 0; retries < 100; retries++ {
 		time.Sleep(50 * time.Millisecond)
 
-		torrentList := qBTConn.GetTorrentList()
-		newHashes := qBTConn.FillIDs(torrentList)
+		_, newHashes := qBTConn.GetTorrentList()
 		if len(newHashes) > 0 {
 			log.WithFields(log.Fields{
 				"hashes": newHashes,
 			}).Debug("New hashes")
 		}
 
-		newId, err = GetIdOfNewHash(newHashes, newHash)
+		newId, err = qBTConn.GetIdOfHash(newHash)
 		if err == nil {
 			log.Debug("Found ID ", newId)
 			break
