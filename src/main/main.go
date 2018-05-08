@@ -32,6 +32,7 @@ var (
 )
 
 var deprecatedFields = []string{
+	"announceUrl",
 	"announceResponse",
 	"seeders",
 	"leechers",
@@ -252,6 +253,17 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["uploadedEver"] = propGeneral.Total_uploaded
 	dst["pieces"] = MakePiecesBitArray(propGeneral.Pieces_num, propGeneral.Pieces_have)
 	dst["peersConnected"] = propGeneral.Peers
+	dst["peersFrom"] = struct {
+		fromCache int
+		fromDht int
+		fromIncoming int
+		fromLdp int
+		fromLtep int
+		fromPex int
+		fromTracker int
+	}{
+		fromTracker: propGeneral.Peers,
+	}
 	dst["corruptEver"] = propGeneral.Total_wasted
 
 	if propGeneral.Up_limit >= 0 {
