@@ -1,6 +1,8 @@
 package transmission
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type RPCRequest struct {
 	Method    string
@@ -26,4 +28,15 @@ type TorrentAddRequest struct {
 	Priority_high     *[]JsonMap   //    indices of high-priority file(s)
 	Priority_low      *[]JsonMap   //    indices of low-priority file(s)
 	Priority_normal   *[]JsonMap   //    indices of normal-priority file(s)
+}
+
+type PeerInfo struct {
+	RateToPeer   int			`json:"rateToPeer"`
+	RateToClient int			`json:"rateToClient"`
+	Port         int			`json:"port"`
+	ClientName   interface{}	`json:"clientName"`
+	FlagStr      string			`json:"flagStr"`
+	Country      interface{}	`json:"country"`
+	Address      string			`json:"address"`
+	Progress     float64 		`json:"progress"`		//	Torrent progress (percentage/100)
 }

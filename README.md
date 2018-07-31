@@ -9,25 +9,35 @@ Currently Reflection is able to:
 * Start, stop, delete torrents
 * Add new torrents from a file, a magnet link of an HTTP/HTTPS link
 * Choose which files should be downloaded
+* Change destination directory
+* Show actual free space
+* Show peer table
 
 Compatibility:
 * Reflection emulates the latest version of Transmission (2.84)
-* Tested against qBittorrent 3.3.1, should work with 3.2.x too.
+* Tested against qBittorrent 4.0.3, should work with older versions too.
 * Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android
 
 What features are not supported yet:
 * Set torrent properties (download/upload speed, etc)
 * Show and change torrent client settings
-* Show peer table
 
 Please note that both qBittorrent and Transmission have some unique features.
 For example, some torrent properties such as a private flag are not exposed by qBittorrent.
 In case Transmission clients request such information, Reflection responds with a predefined template data. Template values are stored in src/transmission/templates.go.
 
+Please set qBitorrent to English language for best experience! You can set this in qBittorrent.conf under Preferences section:
+
+```
+[Preferences]
+...
+General\Locale=en_US
+```
+
 ## Usage:
 
 ```bash
-git clone https://github.com/h31/Reflection.git
+git clone https://github.com/Xmister/Reflection.git
 cd Reflection/
 export GOPATH=$(pwd)
 go get main
@@ -35,9 +45,4 @@ go build main
 ./main
 ```
 
-Binaries for some popular platforms (Windows, Linux, OS X) can be downloaded from a release page.
-
 Use a `--help` flag to show settings. Default qBittorrent address is `http://localhost:8080/`.
-
-Reflection works best with these qBittorrent settings (can be changed in ~/.config/qBittorrent/qBittorrent.conf):
-* `Downloads\StartInPause=true` - highly recommended for a stable work
