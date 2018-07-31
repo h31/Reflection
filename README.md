@@ -37,7 +37,7 @@ General\Locale=en_US
 ## Usage:
 
 ```bash
-git clone https://github.com/Xmister/Reflection.git
+git clone https://github.com/h31/Reflection.git
 cd Reflection/
 export GOPATH=$(pwd)
 go get main
