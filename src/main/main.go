@@ -318,9 +318,8 @@ func MapPropsPeers(dst JsonMap, hash string) {
 }
 
 
-func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers, propGeneral qBT.PropertiesGeneral) {
+func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 	trackersList := make([]JsonMap, len(trackers))
-	trackerStats := make([]JsonMap, len(trackers))
 
 	for i, value := range trackers {
 		h := fnv.New32a();
@@ -331,6 +330,18 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers, propGenera
 		trackersList[i]["id"] = id
 		trackersList[i]["scrape"] = value.Url
 		trackersList[i]["tier"] = 0 // TODO
+	}
+
+	dst["trackers"] = trackersList
+}
+
+func MapPropsTrackerStats(dst JsonMap, trackers []qBT.PropertiesTrackers, propGeneral qBT.PropertiesGeneral) {
+	trackerStats := make([]JsonMap, len(trackers))
+
+	for i, value := range trackers {
+		h := fnv.New32a();
+		h.Write([]byte(value.Url))
+		id := h.Sum32()
 
 		trackerStats[i] = make(JsonMap)
 		for key, value := range transmission.TrackerStatsTemplate {
@@ -350,8 +361,29 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers, propGenera
 		trackerStats[i]["tier"] = 0 // TODO
 	}
 
-	dst["trackers"] = trackersList
 	dst["trackerStats"] = trackerStats
+}
+
+func MapPropsTrackerStatsFake(dst JsonMap, torrentList qBT.TorrentsList) {
+	trackerStats := JsonMap{}
+
+	for key, value := range transmission.TrackerStatsTemplate {
+		trackerStats[key] = value
+	}
+	trackerStats["announce"] = ""
+	trackerStats["host"] = ""
+	trackerStats["leecherCount"] = torrentList.Num_incomplete
+	trackerStats["seederCount"] = torrentList.Num_complete
+	trackerStats["downloadCount"] = 0
+	trackerStats["lastAnnouncePeerCount"] = torrentList.Num_complete + torrentList.Num_incomplete
+	trackerStats["lastAnnounceResult"] = "OK"
+	trackerStats["lastAnnounceSucceeded"] = true
+	trackerStats["hasAnnounced"] = true
+	trackerStats["id"] = 0
+	trackerStats["scrape"] = ""
+	trackerStats["tier"] = 0 // TODO
+
+	dst["trackerStats"] = []JsonMap{trackerStats}
 }
 
 func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
@@ -398,6 +430,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	fields := req.Fields
 	filesNeeded := false
 	trackersNeeded := false
+	trackerStatsNeeded := false
 	peersNeeded := false
 	propsGeneralNeeded := false
 	for _, field := range fields {
@@ -405,8 +438,11 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		case "files", "fileStats", "priorities", "wanted":
 			filesNeeded = true
 			break
-		case "trackers", "trackerStats":
+		case "trackers":
 			trackersNeeded = true
+			break
+		case "trackerStats":
+			trackerStatsNeeded = true
 			break
 		case "peers":
 			peersNeeded = true
@@ -428,15 +464,18 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 
 		MapTorrentList(translated, torrentList, id) // TODO: Make it conditional too
 
-		if propsGeneralNeeded || trackersNeeded {
+		if propsGeneralNeeded {
+			log.Info("Props required")
 			propGeneral := qBTConn.GetPropsGeneral(id)
-			if propsGeneralNeeded {
-				MapPropsGeneral(translated, propGeneral)
-			}
-			if trackersNeeded {
-				trackers := qBTConn.GetPropsTrackers(id)
-				MapPropsTrackers(translated, trackers, propGeneral)
-			}
+			MapPropsGeneral(translated, propGeneral)
+		}
+		if trackersNeeded {
+			log.Info("Trackers required")
+			trackers := qBTConn.GetPropsTrackers(id)
+			MapPropsTrackers(translated, trackers)
+		}
+		if trackerStatsNeeded {
+			MapPropsTrackerStatsFake(translated, getTorrentById(torrentList, id))
 		}
 		if filesNeeded {
 			files := qBTConn.GetPropsFiles(id)
