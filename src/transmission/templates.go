@@ -71,6 +71,7 @@ var TorrentGetBase = JsonMap{
 	"seedIdleMode":            0, // TR_IDLELIMIT_GLOBAL
 	// TODO
 	"peers": []string{},
+	"magnetLink": "",
 }
 
 var TrackerStatsTemplate = JsonMap{
