@@ -41,11 +41,12 @@ type Auth struct {
 type Connection struct {
 	Addr string
 	// Hash to ID map. Array index is an ID
-	lastId int
-	HashIds []string
-	Tr      *http.Transport
-	Client  *http.Client
-	Auth    Auth
+	lastId   int
+	HashIds  []string
+	Tr       *http.Transport
+	Client   *http.Client
+	Auth     Auth
+	MainData MainData
 }
 
 func (q *Connection) MakeRequestURLWithParam(path string, params map[string]string) string {
@@ -65,25 +66,44 @@ func (q *Connection) MakeRequestURL(path string) string {
 	return q.MakeRequestURLWithParam(path, map[string]string{})
 }
 
-func (q *Connection) GetTorrentList() (resp []TorrentsList, newHashes []string) {
+func (q *Connection) getTorrentListDirect() (resp []TorrentsList) {
 	url := q.MakeRequestURLWithParam("/query/torrents", map[string]string{"sort": "hash"})
 	torrents := q.DoGET(url)
 
 	err := json.Unmarshal(torrents, &resp)
 	checkAndLog(err, torrents)
+	return
+}
 
-	if q.GetHashNum() == 0 || q.GetHashNum() != len(resp){
+func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
+	url := q.MakeRequestURL("/sync/maindata")
+	mainData := q.DoGET(url)
+
+	err := json.Unmarshal(mainData, &q.MainData)
+	checkAndLog(err, mainData)
+	for hash, torrentData := range *q.MainData.Torrents {
+		torrentData.Hash = hash
+		resp = append(resp, torrentData)
+	}
+	return
+}
+
+func (q *Connection) GetTorrentList() (resp []TorrentsList, newHashes []string) {
+	resp = q.getTorrentListCached()
+
+	if q.GetHashNum() == 0 || q.GetHashNum() != len(resp) {
 		newHashes = q.FillIDs(resp)
 		log.Debug("Filling IDs table, new size: ", q.GetHashNum())
 	}
 	return
 }
 
-func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral, err error) {
+func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
 	propGeneralURL := q.MakeRequestURL("/query/propertiesGeneral/" + q.GetHashForId(id))
 	propGeneralRaw := q.DoGET(propGeneralURL)
 
-	err = json.Unmarshal(propGeneralRaw, &propGeneral)
+	err := json.Unmarshal(propGeneralRaw, &propGeneral)
+	checkAndLog(err, propGeneralRaw)
 	return
 }
 
@@ -112,6 +132,15 @@ func (q *Connection) GetTransferInfo() (info TransferInfo) {
 
 	err := json.Unmarshal(infoRaw, &info)
 	checkAndLog(err, infoRaw)
+	return
+}
+
+func (q *Connection) GetMainData() (info TransferInfo) {
+	mainDataURL := q.MakeRequestURL("/sync/maindata")
+	mainDataRaw := q.DoGET(mainDataURL)
+
+	err := json.Unmarshal(mainDataRaw, &info)
+	checkAndLog(err, mainDataRaw)
 	return
 }
 
@@ -162,7 +191,7 @@ func (q *Connection) PostForm(url string, data url.Values) []byte {
 }
 
 func (q *Connection) GetHashForId(id int) string {
-	if (len(q.HashIds) >= id) {
+	if len(q.HashIds) >= id {
 		return q.HashIds[id-1]
 	} else {
 		return "a"
@@ -181,7 +210,6 @@ func (q *Connection) GetIdOfHash(hash string) (int, error) {
 	}
 	return 0, errors.New("No such hash")
 }
-
 
 func (q *Connection) CheckAuth() error {
 	requestURL := q.MakeRequestURL("/query/torrents")
@@ -233,11 +261,11 @@ func (q *Connection) Login(username, password string) bool {
 }
 
 func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
-		// Refill the table completely to handle removed hashes
-		q.HashIds = make([]string, len(torrentsList))
+	// Refill the table completely to handle removed hashes
+	q.HashIds = make([]string, len(torrentsList))
 
-		for key, value := range torrentsList {
-			q.HashIds[key] = value.Hash
-		}
+	for key, value := range torrentsList {
+		q.HashIds[key] = value.Hash
+	}
 	return
 }

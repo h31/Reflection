@@ -27,18 +27,17 @@ type TorrentsList struct {
 }
 
 type PeerInfo struct {
-	Up_speed		int
-	Uploaded		int64
-	Down_speed		int
-	Port			int
-	Downloaded		int64
-	Client			string
-	Country			string
-	Flags			string
-	IP				string
-	Progress		float64 //	Torrent progress (percentage/100)
+	Up_speed   int
+	Uploaded   int64
+	Down_speed int
+	Port       int
+	Downloaded int64
+	Client     string
+	Country    string
+	Flags      string
+	IP         string
+	Progress   float64 //	Torrent progress (percentage/100)
 }
-
 
 type PropertiesGeneral struct {
 	Save_path                string  //	Torrent save path
@@ -100,6 +99,17 @@ type TransferInfo struct {
 	Up_rate_limit     int    //	Upload rate limit (bytes/s)
 	Dht_nodes         int    //	DHT nodes connected to
 	Connection_status string //	Connection status. See possible values here below
+}
+
+type MainData struct {
+	Rid                int
+	Full_update        bool
+	Torrents           *map[string]TorrentsList
+	Torrents_removed   []string
+	Categories         []string
+	Categories_removed []string
+	Queueing           bool
+	Server_state       *TransferInfo
 }
 
 type Preferences struct {

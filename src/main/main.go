@@ -396,42 +396,71 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 
 	ids := parseIDsArgument(req.Ids)
 	fields := req.Fields
+	filesNeeded := false
+	trackersNeeded := false
+	peersNeeded := false
+	propsGeneralNeeded := false
+	for _, field := range fields {
+		switch field {
+		case "files", "fileStats", "priorities", "wanted":
+			filesNeeded = true
+			break
+		case "trackers", "trackerStats":
+			trackersNeeded = true
+			break
+		case "peers":
+			peersNeeded = true
+			break
+		case "downloadDir", "pieceSize", "pieceCount", "addedDate",
+			"startDate", "comment", "dateCreated", "creator",
+			"doneDate", "totalSize", "haveValid", "downloadedEver",
+			"uploadedEver", "pieces", "peersConnected", "peersFrom",
+			"corruptEver", "uploadLimited", "uploadLimit", "downloadLimited",
+			"downloadLimit", "maxConnectedPeers", "peer-limit":
+				propsGeneralNeeded = true
+				break
+		}
+	}
 
 	resultList := make([]JsonMap, len(ids))
 	for i, id := range ids {
 		translated := make(JsonMap)
-		propGeneral, err := qBTConn.GetPropsGeneral(id)
-		if err != nil {
-			log.Error("General property error: ", err)
-			continue
-		}
-		trackers := qBTConn.GetPropsTrackers(id)
-		files := qBTConn.GetPropsFiles(id)
 
-		MapTorrentList(translated, torrentList, id)
-		MapPropsGeneral(translated, propGeneral)
-		MapPropsTrackers(translated, trackers, propGeneral)
-		MapPropsFiles(translated, files)
-		MapPropsPeers(translated, qBTConn.GetHashForId(id))
+		MapTorrentList(translated, torrentList, id) // TODO: Make it conditional too
+
+		if propsGeneralNeeded || trackersNeeded {
+			propGeneral := qBTConn.GetPropsGeneral(id)
+			if propsGeneralNeeded {
+				MapPropsGeneral(translated, propGeneral)
+			}
+			if trackersNeeded {
+				trackers := qBTConn.GetPropsTrackers(id)
+				MapPropsTrackers(translated, trackers, propGeneral)
+			}
+		}
+		if filesNeeded {
+			files := qBTConn.GetPropsFiles(id)
+			MapPropsFiles(translated, files)
+		}
+		if peersNeeded {
+			MapPropsPeers(translated, qBTConn.GetHashForId(id))
+		}
 
 		translated["id"] = id
 		translated["queuePosition"] = i+1
-		e := false
+		// TODO: Check it once
 		for _, field := range fields {
 			if _, ok := translated[field]; !ok {
 				if !IsFieldDeprecated(field) {
 					log.Error("Unsupported field: ", field)
-					e = true
+					panic("Unsupported field: " + field)
 				}
 			}
 		}
-		if e {
-			continue;
-		}
-		for key := range translated {
-			if !Any(fields, key) {
+		for translatedField := range translated {
+			if !Any(fields, translatedField) {
 				// Remove unneeded fields
-				delete(translated, key)
+				delete(translated, translatedField)
 			}
 		}
 		resultList[i] = translated
@@ -528,26 +557,17 @@ func SessionStats() (JsonMap, string) {
 		session[key] = value
 	}
 
-	torrentList,_ := qBTConn.GetTorrentList()
+	torrentList, _ := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(nil)
-	
+
 	paused := 0
 	active := 0
 	all := 0
 	timeElapsed  := 0
 	
 	for _,id := range ids {
-		torrent := getTorrentById(torrentList,id)
-		propGeneral, err := qBTConn.GetPropsGeneral(id)
-		if err != nil {
-			log.Error("General property error: ", err)
-			continue
-		}
-
-		if propGeneral.Time_elapsed > timeElapsed {
-			timeElapsed=propGeneral.Time_elapsed
-		}
+		torrent := getTorrentById(torrentList, id)
 
 		if qBTStateToTransmissionStatus(torrent.State) == TR_STATUS_STOPPED {
 			paused++
@@ -555,7 +575,7 @@ func SessionStats() (JsonMap, string) {
 			active++
 		}
 		all++
-		
+
 	}
 
 	info := qBTConn.GetTransferInfo()
@@ -1000,7 +1020,7 @@ func main() {
 	}
 	qBTConn.Addr = *apiAddr
 	qBTConn.Tr = &http.Transport{
-		DisableKeepAlives: true,
+		//DisableKeepAlives: true, // TODO
 	}
 	qBTConn.Client = &http.Client{Transport: qBTConn.Tr}
 
