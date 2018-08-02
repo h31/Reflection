@@ -1,4 +1,4 @@
-package main
+package reflection
 
 import (
 	"bytes"
@@ -1062,7 +1062,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.Write(respBody)
 }
 
-func main() {
+func Launch() {
 	kingpin.Parse()
 	switch {
 	case *debug:
