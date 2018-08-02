@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 func check(e error) {
@@ -30,12 +29,8 @@ func checkAndLog(e error, payload []byte) {
 }
 
 type Auth struct {
-	Required bool
 	LoggedIn bool
 	Cookie   http.Cookie
-
-	Username string
-	Password string
 }
 
 type Connection struct {
@@ -158,12 +153,11 @@ func (q *Connection) GetPropsFiles(id int) (files []PropertiesFiles) {
 	return
 }
 
-func (q *Connection) DoGET(lurl string) []byte {
-	req, err := http.NewRequest("GET", lurl, nil)
-	if q.Auth.Required {
-		req.AddCookie(&q.Auth.Cookie)
-	}
+func (q *Connection) DoGET(url string) []byte {
+	req, err := http.NewRequest("GET", url, nil)
 	check(err)
+	req.AddCookie(&q.Auth.Cookie)
+
 	resp, err := q.Client.Do(req)
 	check(err)
 	defer resp.Body.Close()
@@ -175,9 +169,7 @@ func (q *Connection) DoPOST(url string, contentType string, body io.Reader) []by
 	req, err := http.NewRequest("POST", url, body)
 	check(err)
 	req.Header.Set("Content-Type", contentType)
-	if q.Auth.Required {
-		req.AddCookie(&q.Auth.Cookie)
-	}
+	req.AddCookie(&q.Auth.Cookie)
 
 	resp, err := q.Client.Do(req)
 	check(err)
@@ -208,56 +200,24 @@ func (q *Connection) GetIdOfHash(hash string) (int, error) {
 			return index + 1, nil
 		}
 	}
-	return 0, errors.New("No such hash")
-}
-
-func (q *Connection) CheckAuth() error {
-	requestURL := q.MakeRequestURL("/query/torrents")
-	resp, err := q.Client.Get(requestURL)
-	if err != nil {
-		return err
-	}
-	q.Auth.Required = (resp.StatusCode == http.StatusForbidden)
-	if q.Auth.Required {
-		log.Info("Auth is required")
-	} else {
-		log.Info("Auth is not required")
-	}
-	return err
-}
-
-func (q *Connection) TryToCheckAuth(num_of_retries int) {
-	for i := 0; i < num_of_retries; i++ {
-		err := q.CheckAuth()
-		if err == nil {
-			return
-		} else {
-			log.Error("qBittorrent RPC is not available, error is ", err)
-			if i == num_of_retries-1 {
-				panic(err)
-			} else {
-				time.Sleep(5 * time.Second)
-			}
-		}
-	}
+	return 0, errors.New("no such hash")
 }
 
 func (q *Connection) Login(username, password string) bool {
 	resp, err := http.PostForm(q.MakeRequestURL("/login"),
 		url.Values{"username": {username}, "password": {password}})
 	check(err)
-	authOK := false
 	for _, value := range resp.Cookies() {
 		if value != nil {
 			cookie := *value
 			if cookie.Name == "SID" {
-				authOK = true
+				q.Auth.LoggedIn = true
 				q.Auth.Cookie = cookie
 				break
 			}
 		}
 	}
-	return authOK
+	return q.Auth.LoggedIn
 }
 
 func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
