@@ -8,6 +8,7 @@ type TorrentsList struct {
 	Hash           string  //	Torrent hash
 	Name           string  //	Torrent name
 	Size           int64   //	Total size (bytes) of files selected for download
+	Total_size     int64   //	Torrent total size (bytes)
 	Progress       float64 //	Torrent progress (percentage/100)
 	Dlspeed        int     //	Torrent download speed (bytes/s)
 	Upspeed        int     //	Torrent upload speed (bytes/s)
@@ -24,6 +25,9 @@ type TorrentsList struct {
 	Label          string  //	Label of the torrent
 	Super_seeding  bool    //	True if super seeding is enabled
 	Force_start    bool    //	True if force start is enabled for this torrent
+	Save_path      string  //	Torrent save path
+	Added_on       int64
+	Completion_on  int64   //   Torrent completion time
 }
 
 type PeerInfo struct {

@@ -24,10 +24,13 @@ import (
 )
 
 var (
-	verbose        = kingpin.Flag("verbose", "Enable debug output").Short('v').Bool()
+	verbose        = kingpin.Flag("verbose", "Enable verbose output").Short('v').Bool()
+	debug          = kingpin.Flag("debug", "Enable debug output").Short('d').Bool()
 	apiAddr        = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
 	port           = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
 	num_of_retries = kingpin.Flag("num", "Number of retries").Short('n').Default("10").Int()
+	accurateTrackerStats = kingpin.Flag("accurate-tracker-stats", "Fast (and less precise) trackerStats response").Short('s').Bool()
+	disableKeepAlive = kingpin.Flag("disable-keep-alive", "Disable HTTP Keep-Alive in requests (may be necessary for older qBittorrent versions)").Bool()
 )
 
 var deprecatedFields = []string{
@@ -133,8 +136,13 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["hashString"] = src.Hash
 	convertedName := EscapeString(src.Name)
 	dst["name"] = convertedName
+	dst["addedDate"] = src.Added_on
+	dst["startDate"] = src.Added_on // TODO
+	dst["doneDate"] = src.Completion_on
 	dst["recheckProgress"] = src.Progress
 	dst["sizeWhenDone"] = src.Size
+	dst["totalSize"] = src.Total_size
+	dst["downloadDir"] = EscapeString(src.Save_path)
 	dst["rateDownload"] = src.Dlspeed
 	dst["rateUpload"] = src.Upspeed
 	dst["uploadRatio"] = src.Ratio
@@ -154,9 +162,10 @@ func getTorrentById(torrentsList []qBT.TorrentsList, id int) (src qBT.TorrentsLi
 	for _, value := range torrentsList {
 		if value.Hash == qBTConn.GetHashForId(id) {
 			src = value
+			return
 		}
 	}
-	return
+	panic("Could not find id " + strconv.Itoa(id))
 }
 
 const TR_STAT_OK = 0
@@ -237,7 +246,6 @@ func EscapeString(in string) escapedString {
 }
 
 func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
-	dst["downloadDir"] = EscapeString(propGeneral.Save_path)
 	dst["pieceSize"] = propGeneral.Piece_size
 	dst["pieceCount"] = propGeneral.Pieces_num
 	dst["addedDate"] = propGeneral.Addition_date
@@ -335,7 +343,7 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 	dst["trackers"] = trackersList
 }
 
-func MapPropsTrackerStats(dst JsonMap, trackers []qBT.PropertiesTrackers, propGeneral qBT.PropertiesGeneral) {
+func MapPropsTrackerStats(dst JsonMap, trackers []qBT.PropertiesTrackers, torrentList qBT.TorrentsList) {
 	trackerStats := make([]JsonMap, len(trackers))
 
 	for i, value := range trackers {
@@ -349,10 +357,10 @@ func MapPropsTrackerStats(dst JsonMap, trackers []qBT.PropertiesTrackers, propGe
 		}
 		trackerStats[i]["announce"] = value.Url
 		trackerStats[i]["host"] = value.Url
-		trackerStats[i]["leecherCount"] = propGeneral.Peers_total
-		trackerStats[i]["seederCount"] = propGeneral.Seeds_total
-		trackerStats[i]["downloadCount"] = propGeneral.Seeds_total
-		trackerStats[i]["lastAnnouncePeerCount"] = propGeneral.Peers_total
+		trackerStats[i]["leecherCount"] = torrentList.Num_incomplete
+		trackerStats[i]["seederCount"] = torrentList.Num_complete
+		trackerStats[i]["downloadCount"] = torrentList.Num_complete // TODO: Find a more accurate source
+		trackerStats[i]["lastAnnouncePeerCount"] = torrentList.Num_complete + torrentList.Num_incomplete // TODO: Is it correct?
 		trackerStats[i]["lastAnnounceResult"] = value.Status
 		trackerStats[i]["lastAnnounceSucceeded"] = value.Status == "Working"
 		trackerStats[i]["hasAnnounced"] = value.Status == "Working"
@@ -374,8 +382,8 @@ func MapPropsTrackerStatsFake(dst JsonMap, torrentList qBT.TorrentsList) {
 	trackerStats["host"] = ""
 	trackerStats["leecherCount"] = torrentList.Num_incomplete
 	trackerStats["seederCount"] = torrentList.Num_complete
-	trackerStats["downloadCount"] = 0
-	trackerStats["lastAnnouncePeerCount"] = torrentList.Num_complete + torrentList.Num_incomplete
+	trackerStats["downloadCount"] = torrentList.Num_complete // TODO: Find a more accurate source
+	trackerStats["lastAnnouncePeerCount"] = torrentList.Num_complete + torrentList.Num_incomplete // TODO: Is it correct?
 	trackerStats["lastAnnounceResult"] = "OK"
 	trackerStats["lastAnnounceSucceeded"] = true
 	trackerStats["hasAnnounced"] = true
@@ -434,27 +442,31 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	peersNeeded := false
 	propsGeneralNeeded := false
 	for _, field := range fields {
+		additionalRequestsNeeded := true
 		switch field {
 		case "files", "fileStats", "priorities", "wanted":
 			filesNeeded = true
-			break
 		case "trackers":
 			trackersNeeded = true
-			break
 		case "trackerStats":
 			trackerStatsNeeded = true
-			break
+			if !*accurateTrackerStats {
+				additionalRequestsNeeded = false
+			}
 		case "peers":
 			peersNeeded = true
-			break
-		case "downloadDir", "pieceSize", "pieceCount", "addedDate",
-			"startDate", "comment", "dateCreated", "creator",
-			"doneDate", "totalSize", "haveValid", "downloadedEver",
+		case "pieceSize", "pieceCount",
+			"comment", "dateCreated", "creator",
+			"haveValid", "downloadedEver",
 			"uploadedEver", "pieces", "peersConnected", "peersFrom",
 			"corruptEver", "uploadLimited", "uploadLimit", "downloadLimited",
 			"downloadLimit", "maxConnectedPeers", "peer-limit":
 				propsGeneralNeeded = true
-				break
+		default:
+			additionalRequestsNeeded = false
+		}
+		if additionalRequestsNeeded && req.Ids == nil {
+			log.Info("Field which caused a full torrent scan (slow op!): " + field)
 		}
 	}
 
@@ -465,16 +477,16 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		MapTorrentList(translated, torrentList, id) // TODO: Make it conditional too
 
 		if propsGeneralNeeded {
-			log.Info("Props required")
+			log.Debug("Props required")
 			propGeneral := qBTConn.GetPropsGeneral(id)
 			MapPropsGeneral(translated, propGeneral)
 		}
-		if trackersNeeded {
-			log.Info("Trackers required")
+		if trackersNeeded || (trackerStatsNeeded && *accurateTrackerStats) {
+			log.Debug("Trackers required")
 			trackers := qBTConn.GetPropsTrackers(id)
 			MapPropsTrackers(translated, trackers)
-		}
-		if trackerStatsNeeded {
+			MapPropsTrackerStats(translated, trackers, getTorrentById(torrentList, id))
+		} else if trackerStatsNeeded {
 			MapPropsTrackerStatsFake(translated, getTorrentById(torrentList, id))
 		}
 		if filesNeeded {
@@ -1052,16 +1064,25 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	kingpin.Parse()
-	if *verbose {
+	switch {
+	case *debug:
 		log.SetLevel(log.DebugLevel)
-	} else {
+	case *verbose:
 		log.SetLevel(log.InfoLevel)
+	default:
+		log.SetLevel(log.WarnLevel)
 	}
 	qBTConn.Addr = *apiAddr
-	qBTConn.Tr = &http.Transport{
-		//DisableKeepAlives: true, // TODO
+	if *disableKeepAlive {
+		log.Info("Disabled HTTP keep-alive")
+		qBTConn.Tr = &http.Transport{
+			DisableKeepAlives: true,
+		}
+		qBTConn.Client = &http.Client{Transport: qBTConn.Tr}
+	} else {
+		qBTConn.Tr = &http.Transport{}
+		qBTConn.Client = &http.Client{}
 	}
-	qBTConn.Client = &http.Client{Transport: qBTConn.Tr}
 
 	qBTConn.TryToCheckAuth(*num_of_retries)
 

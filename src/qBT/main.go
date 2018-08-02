@@ -89,7 +89,7 @@ func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
 }
 
 func (q *Connection) GetTorrentList() (resp []TorrentsList, newHashes []string) {
-	resp = q.getTorrentListCached()
+	resp = q.getTorrentListDirect()
 
 	if q.GetHashNum() == 0 || q.GetHashNum() != len(resp) {
 		newHashes = q.FillIDs(resp)
