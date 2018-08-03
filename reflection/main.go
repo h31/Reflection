@@ -91,8 +91,11 @@ func parseIDsField(args *json.RawMessage) []int {
 			case float64:
 				result[i] = int(id)
 			case string:
-				result[i], err = qBTConn.GetIdOfHash(id)
-				Check(err)
+				var exists bool
+				result[i], exists = qBTConn.GetIdOfHash(id)
+				if !exists {
+					panic("hash not found")
+				}
 			}
 		}
 		return result
@@ -432,7 +435,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	torrentList, _ := qBTConn.GetTorrentList()
+	torrentList := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(req.Ids)
 	fields := req.Fields
@@ -608,7 +611,7 @@ func SessionStats() (JsonMap, string) {
 		session[key] = value
 	}
 
-	torrentList, _ := qBTConn.GetTorrentList()
+	torrentList := qBTConn.GetTorrentList()
 
 	ids := parseIDsArgument(nil)
 
@@ -687,7 +690,7 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	hashes := make([]string, len(ids))
 	for i, value := range ids {
 		hashes[i] = qBTConn.GetHashForId(value)
-		qBTConn.HashIds[value-1] = ""
+		//qBTConn.HashIds[value-1] = ""
 	}
 
 	joinedHashes := strings.Join(hashes, "|")
@@ -841,7 +844,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		"name": newName,
 	}).Debug("Attempting to add torrent")
 
-	if newId, err := qBTConn.GetIdOfHash(newHash); err == nil {
+	if newId, exists := qBTConn.GetIdOfHash(newHash); exists {
 		return JsonMap{
 			"torrent-duplicate": JsonMap{
 				"id":         newId,
@@ -851,19 +854,13 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		}, "success"
 	}
 
-	newId := -1
+	exists := false
+	newId := 0
 	for retries := 0; retries < 100; retries++ {
 		time.Sleep(50 * time.Millisecond)
-
-		_, newHashes := qBTConn.GetTorrentList()
-		if len(newHashes) > 0 {
-			log.WithFields(log.Fields{
-				"hashes": newHashes,
-			}).Debug("New hashes")
-		}
-
-		newId, err = qBTConn.GetIdOfHash(newHash)
-		if err == nil {
+		qBTConn.GetTorrentList()
+		newId, exists = qBTConn.GetIdOfHash(newHash)
+		if exists {
 			log.Debug("Found ID ", newId)
 			break
 		}
@@ -871,7 +868,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		log.Debug("Nothing was found, waiting...")
 	}
 
-	if newId == -1 {
+	if !exists {
 		return JsonMap{}, "Torrent-add timeout"
 	}
 
@@ -1049,6 +1046,7 @@ func Launch() {
 	default:
 		log.SetLevel(log.WarnLevel)
 	}
+	qBTConn.Init()
 	qBTConn.Addr = *apiAddr
 	if *disableKeepAlive {
 		log.Info("Disabled HTTP keep-alive")

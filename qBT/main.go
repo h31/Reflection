@@ -2,7 +2,6 @@ package qBT
 
 import (
 	"encoding/json"
-	"errors"
 	log "github.com/Sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -36,12 +35,17 @@ type Auth struct {
 type Connection struct {
 	Addr string
 	// Hash to ID map. Array index is an ID
-	lastId   int
-	HashIds  []string
-	Tr       *http.Transport
-	Client   *http.Client
-	Auth     Auth
-	MainData MainData
+	HashIds   []string
+	hashIdMap map[string]int
+	Tr        *http.Transport
+	Client    *http.Client
+	Auth      Auth
+	MainData  MainData
+}
+
+func (q *Connection) Init() {
+	q.HashIds = make([]string, 0)
+	q.hashIdMap = make(map[string]int)
 }
 
 func (q *Connection) MakeRequestURLWithParam(path string, params map[string]string) string {
@@ -83,13 +87,9 @@ func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
 	return
 }
 
-func (q *Connection) GetTorrentList() (resp []TorrentsList, newHashes []string) {
+func (q *Connection) GetTorrentList() (resp []TorrentsList) {
 	resp = q.getTorrentListDirect()
-
-	if q.GetHashNum() == 0 || q.GetHashNum() != len(resp) {
-		newHashes = q.FillIDs(resp)
-		log.Debug("Filling IDs table, new size: ", q.GetHashNum())
-	}
+	q.UpdateIDs(resp)
 	return
 }
 
@@ -194,13 +194,9 @@ func (q *Connection) GetHashNum() int {
 	return len(q.HashIds)
 }
 
-func (q *Connection) GetIdOfHash(hash string) (int, error) {
-	for index, value := range q.HashIds {
-		if value == hash {
-			return index + 1, nil
-		}
-	}
-	return 0, errors.New("no such hash")
+func (q *Connection) GetIdOfHash(hash string) (int, bool) {
+	value, ok := q.hashIdMap[hash]
+	return value + 1, ok
 }
 
 func (q *Connection) Login(username, password string) bool {
@@ -220,12 +216,34 @@ func (q *Connection) Login(username, password string) bool {
 	return q.Auth.LoggedIn
 }
 
-func (q *Connection) FillIDs(torrentsList []TorrentsList) (newHashes []string) {
-	// Refill the table completely to handle removed hashes
-	q.HashIds = make([]string, len(torrentsList))
+func (q *Connection) UpdateIDs(torrentsList []TorrentsList) {
+	keepHash := make(map[int]interface{})
+	addedCount := 0
 
-	for key, value := range torrentsList {
-		q.HashIds[key] = value.Hash
+	for _, torrent := range torrentsList {
+		newHash := torrent.Hash
+		if index, exists := q.hashIdMap[newHash]; exists {
+			keepHash[index] = true
+		} else {
+			lastIndex := len(q.HashIds)
+			q.hashIdMap[newHash] = lastIndex
+			keepHash[lastIndex] = true
+			q.HashIds = append(q.HashIds, newHash)
+			addedCount++
+		}
 	}
-	return
+	if addedCount > 0 {
+		log.WithField("num", addedCount).Info("Added new hashes to IDs table")
+	}
+
+	for i := 0; i < len(q.HashIds); i++ {
+		if q.HashIds[i] == "" {
+			continue
+		}
+		if _, exists := keepHash[i]; !exists {
+			log.WithField("hash", q.HashIds[i]).Info("Hash disappeared from the torrent list")
+			delete(q.hashIdMap, q.HashIds[i])
+			q.HashIds[i] = ""
+		}
+	}
 }
