@@ -690,6 +690,14 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	hashes := make([]string, len(ids))
 	for i, value := range ids {
 		hashes[i] = qBTConn.GetHashForId(value)
+
+		torrents := qBTConn.GetTorrentList()
+		for _, torrent := range torrents {
+			if torrent.Hash == hashes[i] {
+				log.Warn("Going to remove torrent named ", torrent.Name, " with hash ", torrent.Hash)
+			}
+		}
+
 		//qBTConn.HashIds[value-1] = ""
 	}
 
@@ -704,11 +712,11 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	}
 
 	if deleteFiles {
-		log.Debug("Remove with files ", joinedHashes)
+		log.Info("Going to remove torrent with files: ", joinedHashes)
 		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/deletePerm"),
 			url.Values{"hashes": {joinedHashes}})
 	} else {
-		log.Debug("Remove ", joinedHashes)
+		log.Info("Going to remove torrent: ", joinedHashes)
 		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/delete"),
 			url.Values{"hashes": {joinedHashes}})
 	}
