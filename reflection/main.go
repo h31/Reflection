@@ -559,7 +559,7 @@ func SessionGet() (JsonMap, string) {
 	session["peer-limit-per-torrent"] = prefs.Max_connec_per_torrent
 	session["peer-port"] = prefs.Listen_port
 	session["seedRatioLimit"] = prefs.Max_ratio
-	session["seedRatioLimited"] = prefs.Max_ratio_act
+	session["seedRatioLimited"] = prefs.Max_ratio_enabled
 	session["peer-port-random-on-start"] = prefs.Random_port
 	session["port-forwarding-enabled"] = prefs.Upnp
 	session["utp-enabled"] = prefs.Enable_utp
