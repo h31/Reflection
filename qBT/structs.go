@@ -27,13 +27,13 @@ type TorrentsList struct {
 	Force_start    bool    //	True if force start is enabled for this torrent
 	Save_path      string  //	Torrent save path
 	Added_on       int64
-	Completion_on  int64   //   Torrent completion time
+	Completion_on  int64 //   Torrent completion time
 }
 
 type PeerInfo struct {
 	Up_speed   int
 	Uploaded   int64
-	Down_speed int
+	Dl_speed   int
 	Port       int
 	Downloaded int64
 	Client     string

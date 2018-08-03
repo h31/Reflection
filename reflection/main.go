@@ -315,8 +315,8 @@ func MapPropsPeers(dst JsonMap, hash string) {
 		clientName := EscapeString(peer.Client)
 		country := EscapeString(peer.Country)
 		trPeers = append(trPeers, transmission.PeerInfo{
-			RateToPeer:   peer.Down_speed,
-			RateToClient: peer.Up_speed,
+			RateToPeer:   peer.Up_speed,
+			RateToClient: peer.Dl_speed,
 			ClientName:   clientName,
 			FlagStr:      peer.Flags,
 			Country:      country,
