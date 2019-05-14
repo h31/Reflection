@@ -468,6 +468,16 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 	dst["wanted"] = wanted
 }
 
+var propsCache = Cache{}
+var trackersCache = Cache{}
+var trackerStatsCache = Cache{}
+
+func (m JsonMap) addAll(source JsonMap)  {
+	for key, value := range *source {
+		m[key] = value
+	}
+}
+
 func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	var req transmission.GetRequest
 	err := json.Unmarshal(args, &req)
@@ -522,8 +532,19 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 
 		if propsGeneralNeeded {
 			log.Debug("Props required")
-			propGeneral := qBTConn.GetPropsGeneral(id)
-			MapPropsGeneral(translated, propGeneral)
+			propsCache.GetOrFill(translated, func(dest JsonMap) {
+				propGeneral := qBTConn.GetPropsGeneral(id)
+				MapPropsGeneral(dest, propGeneral)
+			})
+			if ok, values := propsCache.IsStillValid(15 * time.Second); ok {
+				translated.addAll(*values)
+			} else {
+				newValues := make(JsonMap)
+				propGeneral := qBTConn.GetPropsGeneral(id)
+				MapPropsGeneral(newValues, propGeneral)
+				translated.addAll(newValues)
+				propsCache.Fill(&newValues)
+			}
 		}
 		if trackersNeeded || (trackerStatsNeeded && *accurateTrackerStats) {
 			log.Debug("Trackers required")
