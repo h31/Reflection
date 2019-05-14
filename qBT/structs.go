@@ -81,7 +81,7 @@ type PropertiesGeneral struct {
 
 type PropertiesTrackers struct {
 	Url       string //	Tracker url
-	Status    string //	Tracker status (translated string). See the table here below for the possible values
+	Status    int    //	Tracker status. See the table below for possible values
 	Num_peers int    //	Number of peers for current torrent reported by the tracker
 	Msg       string // Tracker message (there is no way of knowing what this message is - it's up to tracker admins)
 }

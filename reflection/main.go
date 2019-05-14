@@ -1,15 +1,16 @@
-package reflection
+package main
 
 import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
+	"github.com/Workiva/go-datastructures/bitarray"
 	"github.com/h31/Reflection/qBT"
 	"github.com/h31/Reflection/transmission"
-	"gopkg.in/alecthomas/kingpin.v2"
+	log "github.com/sirupsen/logrus"
 	"hash/fnv"
 	"io/ioutil"
 	"math"
@@ -24,14 +25,21 @@ import (
 )
 
 var (
-	verbose = kingpin.Flag("verbose", "Enable verbose output").Short('v').Bool()
-	debug   = kingpin.Flag("debug", "Enable debug output").Short('d').Bool()
-	apiAddr = kingpin.Flag("api-addr", "qBittorrent API address").Short('r').Default("http://localhost:8080/").String()
-	port    = kingpin.Flag("port", "Transmission RPC port").Short('p').Default("9091").Int()
-	//num_of_retries = kingpin.Flag("num", "Number of retries").Short('n').Default("10").Int()
-	accurateTrackerStats = kingpin.Flag("accurate-tracker-stats", "Fast (and less precise) trackerStats response").Short('s').Bool()
-	disableKeepAlive     = kingpin.Flag("disable-keep-alive", "Disable HTTP Keep-Alive in requests (may be necessary for older qBittorrent versions)").Bool()
+	verbose              = flag.Bool("verbose", false, "Enable verbose output")
+	debug                = flag.Bool("debug", false, "Enable debug output")
+	apiAddr              = flag.String("api-addr", "http://localhost:8080/", "qBittorrent API address")
+	port                 = flag.Uint("port", 9091, "Transmission RPC port")
+	accurateTrackerStats = flag.Bool("accurate-tracker-stats", false, "Fast (and less precise) trackerStats response")
+	disableKeepAlive     = flag.Bool("disable-keep-alive", false, "Disable HTTP Keep-Alive in requests (may be necessary for older qBittorrent versions)")
 )
+
+func init() {
+	flag.BoolVar(verbose, "v", false, "")
+	flag.BoolVar(debug, "d", false, "")
+	flag.StringVar(apiAddr, "r", "http://localhost:8080/", "")
+	flag.UintVar(port, "p", 9091, "")
+	flag.Parse()
+}
 
 var deprecatedFields = []string{
 	"announceUrl",
@@ -217,6 +225,20 @@ func qBTStateToTransmissionStatus(state string) int {
 	}
 }
 
+func MapPieceStates(dst JsonMap, pieces []byte) {
+	bits := bitarray.NewSparseBitArray()
+
+	for i, value := range pieces {
+		if value == 2 {
+			bits.SetBit(uint64(i))
+		}
+	}
+
+	serialized, _ := bitarray.Marshal(bits)
+
+	dst["pieces"] = base64.StdEncoding.EncodeToString(serialized)
+}
+
 func MakePiecesBitArray(total, have int) string {
 	if (total < 0) || (have < 0) {
 		return "" // Empty array
@@ -262,7 +284,6 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["haveValid"] = propGeneral.Piece_size * propGeneral.Pieces_have
 	dst["downloadedEver"] = propGeneral.Total_downloaded
 	dst["uploadedEver"] = propGeneral.Total_uploaded
-	dst["pieces"] = MakePiecesBitArray(propGeneral.Pieces_num, propGeneral.Pieces_have)
 	dst["peersConnected"] = propGeneral.Peers
 	dst["peersFrom"] = struct {
 		fromCache    int
@@ -298,7 +319,7 @@ func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 }
 
 func MapPropsPeers(dst JsonMap, hash string) {
-	url := qBTConn.MakeRequestURLWithParam("/sync/torrent_peers", map[string]string{"hash": hash, "rid": "0"})
+	url := qBTConn.MakeRequestURLWithParam("sync/torrentPeers", map[string]string{"hash": hash, "rid": "0"})
 	torrents := qBTConn.DoGET(url)
 
 	log.Debug(string(torrents))
@@ -364,15 +385,32 @@ func MapPropsTrackerStats(dst JsonMap, trackers []qBT.PropertiesTrackers, torren
 		trackerStats[i]["seederCount"] = torrentList.Num_complete
 		trackerStats[i]["downloadCount"] = torrentList.Num_complete                                      // TODO: Find a more accurate source
 		trackerStats[i]["lastAnnouncePeerCount"] = torrentList.Num_complete + torrentList.Num_incomplete // TODO: Is it correct?
-		trackerStats[i]["lastAnnounceResult"] = value.Status
-		trackerStats[i]["lastAnnounceSucceeded"] = value.Status == "Working"
-		trackerStats[i]["hasAnnounced"] = value.Status == "Working"
+		trackerStats[i]["lastAnnounceResult"] = decodeTrackerStatus(value.Status)
+		trackerStats[i]["lastAnnounceSucceeded"] = value.Status == 2
+		trackerStats[i]["hasAnnounced"] = value.Status == 2
 		trackerStats[i]["id"] = id
 		trackerStats[i]["scrape"] = ""
 		trackerStats[i]["tier"] = 0 // TODO
 	}
 
 	dst["trackerStats"] = trackerStats
+}
+
+func decodeTrackerStatus(status int) string {
+	switch status {
+	case 0:
+		return "Tracker is disabled"
+	case 1:
+		return "Tracker has not been contacted yet"
+	case 2:
+		return "Tracker has been contacted and is working"
+	case 3:
+		return "Tracker is updating"
+	case 4:
+		return "Tracker has been contacted, but it is not working (or doesn't send proper replies)"
+	default:
+		return "Unknown status"
+	}
 }
 
 func MapPropsTrackerStatsFake(dst JsonMap, torrentList qBT.TorrentsList) {
@@ -435,7 +473,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	torrentList := qBTConn.GetTorrentList()
+	torrentList := qBTConn.GetTorrentList(nil)
 
 	ids := parseIDsArgument(req.Ids)
 	fields := req.Fields
@@ -444,6 +482,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	trackerStatsNeeded := false
 	peersNeeded := false
 	propsGeneralNeeded := false
+	piecesNeeded := false
 	for _, field := range fields {
 		additionalRequestsNeeded := true
 		switch field {
@@ -461,10 +500,12 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		case "pieceSize", "pieceCount",
 			"comment", "dateCreated", "creator",
 			"haveValid", "downloadedEver",
-			"uploadedEver", "pieces", "peersConnected", "peersFrom",
+			"uploadedEver", "peersConnected", "peersFrom",
 			"corruptEver", "uploadLimited", "uploadLimit", "downloadLimited",
 			"downloadLimit", "maxConnectedPeers", "peer-limit":
 			propsGeneralNeeded = true
+		case "pieces":
+			piecesNeeded = true
 		default:
 			additionalRequestsNeeded = false
 		}
@@ -492,11 +533,18 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		} else if trackerStatsNeeded {
 			MapPropsTrackerStatsFake(translated, getTorrentById(torrentList, id))
 		}
+		if piecesNeeded {
+			log.Debug("Pieces required")
+			pieces := qBTConn.GetPiecesStates(id)
+			MapPieceStates(translated, pieces)
+		}
 		if filesNeeded {
+			log.Debug("Files required")
 			files := qBTConn.GetPropsFiles(id)
 			MapPropsFiles(translated, files)
 		}
 		if peersNeeded {
+			log.Debug("Peers required")
 			MapPropsPeers(translated, qBTConn.GetHashForId(id))
 		}
 
@@ -611,7 +659,7 @@ func SessionStats() (JsonMap, string) {
 		session[key] = value
 	}
 
-	torrentList := qBTConn.GetTorrentList()
+	torrentList := qBTConn.GetTorrentList(nil)
 
 	ids := parseIDsArgument(nil)
 
@@ -650,8 +698,8 @@ func TorrentPause(args json.RawMessage) (JsonMap, string) {
 	for _, hash := range hashes {
 		log.Debug("Stopping torrent with hash ", hash)
 
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/pause"),
-			url.Values{"hash": {hash}})
+		qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/pause"),
+			url.Values{"hashes": {hash}})
 	}
 	return JsonMap{}, "success"
 }
@@ -661,8 +709,8 @@ func TorrentResume(args json.RawMessage) (JsonMap, string) {
 	for _, hash := range hashes {
 		log.Debug("Starting torrent with hash ", hash)
 
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/resume"),
-			url.Values{"hash": {hash}})
+		qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/resume"),
+			url.Values{"hashes": {hash}})
 	}
 	return JsonMap{}, "success"
 }
@@ -672,8 +720,8 @@ func TorrentRecheck(args json.RawMessage) (JsonMap, string) {
 	for _, hash := range hashes {
 		log.Debug("Verifying torrent with hash ", hash)
 
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/recheck"),
-			url.Values{"hash": {hash}})
+		qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/recheck"),
+			url.Values{"hashes": {hash}})
 	}
 	return JsonMap{}, "success"
 }
@@ -691,7 +739,7 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	for i, value := range ids {
 		hashes[i] = qBTConn.GetHashForId(value)
 
-		torrents := qBTConn.GetTorrentList()
+		torrents := qBTConn.GetTorrentList(nil)
 		for _, torrent := range torrents {
 			if torrent.Hash == hashes[i] {
 				log.Warn("Going to remove torrent named ", torrent.Name, " with hash ", torrent.Hash)
@@ -711,28 +759,24 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 		deleteFiles = (val != 0)
 	}
 
+	params := map[string]string{"hashes": joinedHashes}
+
 	if deleteFiles {
 		log.Info("Going to remove torrent with files: ", joinedHashes)
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/deletePerm"),
-			url.Values{"hashes": {joinedHashes}})
+		params["deleteFiles"] = "true"
 	} else {
 		log.Info("Going to remove torrent: ", joinedHashes)
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/delete"),
-			url.Values{"hashes": {joinedHashes}})
+		params["deleteFiles"] = "false"
 	}
+	url := qBTConn.MakeRequestURLWithParam("torrents/delete", params)
+	qBTConn.DoGET(url)
 
 	return JsonMap{}, "success"
 }
 
-func UploadTorrent(metainfo *[]byte, urls *string, destDir *string, paused_optional ...bool) {
+func UploadTorrent(metainfo *[]byte, urls *string, destDir *string, paused bool) {
 	var buffer bytes.Buffer
 	mime := multipart.NewWriter(&buffer)
-
-	paused := false
-
-	if len(paused_optional) > 0 {
-		paused = paused_optional[0]
-	}
 
 	if metainfo != nil {
 		mimeWriter, err := mime.CreateFormFile("torrents", "example.torrent")
@@ -763,7 +807,7 @@ func UploadTorrent(metainfo *[]byte, urls *string, destDir *string, paused_optio
 
 	mime.Close()
 
-	qBTConn.DoPOST(qBTConn.MakeRequestURL("/command/upload"), mime.FormDataContentType(), &buffer)
+	qBTConn.DoPOST(qBTConn.MakeRequestURL("torrents/add"), mime.FormDataContentType(), &buffer)
 	log.Debug("Torrent uploaded")
 }
 
@@ -804,7 +848,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	qBTConn.GetTorrentList()
+	qBTConn.GetTorrentList(nil)
 
 	var newHash string
 	var newName string
@@ -813,6 +857,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	if req.Paused != nil {
 		if value, ok := (*req.Paused).(float64); ok {
 			// Workaround: Transmission Remote GUI uses a number instead of a boolean
+			log.Debug("Apply Transmission Remote GUI workaround")
 			paused = value != 0
 		}
 		if value, ok := (*req.Paused).(bool); ok {
@@ -821,24 +866,16 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	}
 
 	if req.Metainfo != nil {
-		log.Debug("Upload torrent using metainfo")
-
+		log.Debug("Upload torrent from metainfo")
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
 		Check(err)
-		newHash, newName = ParseMetainfo(metainfo)
 		UploadTorrent(&metainfo, nil, req.Download_dir, paused)
 	} else if req.Filename != nil {
 		path := *req.Filename
 		if strings.HasPrefix(path, "magnet:?") {
 			newHash, newName = ParseMagnetLink(path)
 
-			if req.Download_dir != nil {
-				qBTConn.PostForm(qBTConn.MakeRequestURL("/command/download"),
-					url.Values{"urls": {*req.Filename}, "savepath": {*req.Download_dir}})
-			} else {
-				qBTConn.PostForm(qBTConn.MakeRequestURL("/command/download"),
-					url.Values{"urls": {*req.Filename}})
-			}
+			UploadTorrent(nil, &path, req.Download_dir, paused)
 		} else if strings.HasPrefix(path, "http") {
 			metainfo := DoGetWithCookies(path, req.Cookies)
 
@@ -866,7 +903,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 	newId := 0
 	for retries := 0; retries < 100; retries++ {
 		time.Sleep(50 * time.Millisecond)
-		qBTConn.GetTorrentList()
+		qBTConn.GetTorrentList(nil)
 		newId, exists = qBTConn.GetIdOfHash(newHash)
 		if exists {
 			log.Debug("Found ID ", newId)
@@ -935,7 +972,7 @@ func TorrentSet(args json.RawMessage) (JsonMap, string) {
 				"id":       {strconv.Itoa(fileId)},
 				"priority": {strconv.Itoa(priority)},
 			}
-			qBTConn.PostForm(qBTConn.MakeRequestURL("/command/setFilePrio"), params)
+			qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/filePrio"), params)
 		}
 	}
 
@@ -972,7 +1009,7 @@ func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
 			"hashes":   {qBTConn.GetHashForId(id)},
 			"location": {*req.Location},
 		}
-		qBTConn.PostForm(qBTConn.MakeRequestURL("/command/setLocation"), params)
+		qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/setLocation"), params)
 	}
 
 	return JsonMap{}, "success" // TODO
@@ -1044,8 +1081,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.Write(respBody)
 }
 
-func Launch() {
-	kingpin.Parse()
+func main() {
 	switch {
 	case *debug:
 		log.SetLevel(log.DebugLevel)
@@ -1054,8 +1090,7 @@ func Launch() {
 	default:
 		log.SetLevel(log.WarnLevel)
 	}
-	qBTConn.Init()
-	qBTConn.Addr = *apiAddr
+	qBTConn.Init(*apiAddr)
 	if *disableKeepAlive {
 		log.Info("Disabled HTTP keep-alive")
 		qBTConn.Tr = &http.Transport{

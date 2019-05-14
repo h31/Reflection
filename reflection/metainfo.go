@@ -1,4 +1,4 @@
-package reflection
+package main
 
 import (
 	"bytes"

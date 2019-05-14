@@ -2,7 +2,7 @@ package qBT
 
 import (
 	"encoding/json"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -33,7 +33,7 @@ type Auth struct {
 }
 
 type Connection struct {
-	Addr string
+	Addr *url.URL
 	// Hash to ID map. Array index is an ID
 	HashIds   []string
 	hashIdMap map[string]int
@@ -43,20 +43,29 @@ type Connection struct {
 	MainData  MainData
 }
 
-func (q *Connection) Init() {
+func (q *Connection) Init(baseUrl string) {
 	q.HashIds = make([]string, 0)
 	q.hashIdMap = make(map[string]int)
+
+	apiAddr, _ := url.Parse("api/v2/")
+	parsedBaseAddr, _ := url.Parse(baseUrl)
+	q.Addr = parsedBaseAddr.ResolveReference(apiAddr)
 }
 
 func (q *Connection) MakeRequestURLWithParam(path string, params map[string]string) string {
-	u, err := url.Parse(q.Addr)
-	check(err)
-	u.Path = path
-	query := u.Query()
-	for key, value := range params {
-		query.Set(key, value)
+	if strings.HasPrefix(path, "/") {
+		panic("Invalid API path: " + path)
 	}
-	u.RawQuery = query.Encode()
+	parsedPath, err := url.Parse(path)
+	check(err)
+	u := q.Addr.ResolveReference(parsedPath)
+	if len(params) > 0 {
+		query := u.Query()
+		for key, value := range params {
+			query.Set(key, value)
+		}
+		u.RawQuery = query.Encode()
+	}
 
 	return u.String()
 }
@@ -65,8 +74,12 @@ func (q *Connection) MakeRequestURL(path string) string {
 	return q.MakeRequestURLWithParam(path, map[string]string{})
 }
 
-func (q *Connection) getTorrentListDirect() (resp []TorrentsList) {
-	url := q.MakeRequestURLWithParam("/query/torrents", map[string]string{"sort": "hash"})
+func (q *Connection) getTorrentListDirect(category *string) (resp []TorrentsList) {
+	params := map[string]string{}
+	if category != nil {
+		params["category"] = *category
+	}
+	url := q.MakeRequestURLWithParam("torrents/info", params)
 	torrents := q.DoGET(url)
 
 	err := json.Unmarshal(torrents, &resp)
@@ -75,7 +88,7 @@ func (q *Connection) getTorrentListDirect() (resp []TorrentsList) {
 }
 
 func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
-	url := q.MakeRequestURL("/sync/maindata")
+	url := q.MakeRequestURL("sync/maindata")
 	mainData := q.DoGET(url)
 
 	err := json.Unmarshal(mainData, &q.MainData)
@@ -87,14 +100,19 @@ func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
 	return
 }
 
-func (q *Connection) GetTorrentList() (resp []TorrentsList) {
-	resp = q.getTorrentListDirect()
+func (q *Connection) GetTorrentList(category *string) (resp []TorrentsList) {
+	resp = q.getTorrentListDirect(category)
 	q.UpdateIDs(resp)
 	return
 }
 
+func (q *Connection) AddNewCategory(category string) {
+	url := q.MakeRequestURLWithParam("torrents/createCategory", map[string]string{"category": category})
+	q.DoGET(url)
+}
+
 func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
-	propGeneralURL := q.MakeRequestURL("/query/propertiesGeneral/" + q.GetHashForId(id))
+	propGeneralURL := q.MakeRequestURLWithParam("torrents/properties", map[string]string{"hash": q.GetHashForId(id)})
 	propGeneralRaw := q.DoGET(propGeneralURL)
 
 	err := json.Unmarshal(propGeneralRaw, &propGeneral)
@@ -103,7 +121,7 @@ func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
 }
 
 func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
-	trackersURL := q.MakeRequestURL("/query/propertiesTrackers/" + q.GetHashForId(id))
+	trackersURL := q.MakeRequestURLWithParam("torrents/trackers", map[string]string{"hash": q.GetHashForId(id)})
 	trackersRaw := q.DoGET(trackersURL)
 
 	err := json.Unmarshal(trackersRaw, &trackers)
@@ -112,8 +130,18 @@ func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
 	return
 }
 
+func (q *Connection) GetPiecesStates(id int) (pieces []byte) {
+	piecesURL := q.MakeRequestURLWithParam("torrents/pieceStates", map[string]string{"hash": q.GetHashForId(id)})
+	piecesRaw := q.DoGET(piecesURL)
+
+	err := json.Unmarshal(piecesRaw, &pieces)
+
+	checkAndLog(err, piecesRaw)
+	return
+}
+
 func (q *Connection) GetPreferences() (pref Preferences) {
-	prefURL := q.MakeRequestURL("/query/preferences")
+	prefURL := q.MakeRequestURL("app/preferences")
 	prefRaw := q.DoGET(prefURL)
 
 	err := json.Unmarshal(prefRaw, &pref)
@@ -122,7 +150,7 @@ func (q *Connection) GetPreferences() (pref Preferences) {
 }
 
 func (q *Connection) GetTransferInfo() (info TransferInfo) {
-	infoURL := q.MakeRequestURL("/query/transferInfo")
+	infoURL := q.MakeRequestURL("transfer/info")
 	infoRaw := q.DoGET(infoURL)
 
 	err := json.Unmarshal(infoRaw, &info)
@@ -131,7 +159,7 @@ func (q *Connection) GetTransferInfo() (info TransferInfo) {
 }
 
 func (q *Connection) GetMainData() (info TransferInfo) {
-	mainDataURL := q.MakeRequestURL("/sync/maindata")
+	mainDataURL := q.MakeRequestURL("sync/maindata")
 	mainDataRaw := q.DoGET(mainDataURL)
 
 	err := json.Unmarshal(mainDataRaw, &info)
@@ -140,12 +168,12 @@ func (q *Connection) GetMainData() (info TransferInfo) {
 }
 
 func (q *Connection) GetVersion() string {
-	versionURL := q.MakeRequestURL("/version/qbittorrent")
+	versionURL := q.MakeRequestURL("app/version")
 	return string(q.DoGET(versionURL))
 }
 
 func (q *Connection) GetPropsFiles(id int) (files []PropertiesFiles) {
-	filesURL := q.MakeRequestURL("/query/propertiesFiles/" + q.GetHashForId(id))
+	filesURL := q.MakeRequestURLWithParam("torrents/files", map[string]string{"hash": q.GetHashForId(id)})
 	filesRaw := q.DoGET(filesURL)
 
 	err := json.Unmarshal(filesRaw, &files)
@@ -200,7 +228,7 @@ func (q *Connection) GetIdOfHash(hash string) (int, bool) {
 }
 
 func (q *Connection) Login(username, password string) bool {
-	resp, err := http.PostForm(q.MakeRequestURL("/login"),
+	resp, err := http.PostForm(q.MakeRequestURL("auth/login"),
 		url.Values{"username": {username}, "password": {password}})
 	check(err)
 	for _, value := range resp.Cookies() {
