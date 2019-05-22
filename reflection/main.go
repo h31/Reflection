@@ -148,7 +148,6 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["addedDate"] = src.Added_on
 	dst["startDate"] = src.Added_on // TODO
 	dst["doneDate"] = src.Completion_on
-	dst["recheckProgress"] = src.Progress
 	dst["sizeWhenDone"] = src.Size
 	dst["totalSize"] = src.Total_size
 	dst["downloadDir"] = EscapeString(src.Save_path)
@@ -157,6 +156,11 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["uploadRatio"] = src.Ratio
 	dst["eta"] = src.Eta
 	dst["status"] = qBTStateToTransmissionStatus(src.State)
+	if dst["status"] == TR_STATUS_CHECK {
+		dst["recheckProgress"] = src.Progress
+	} else {
+		dst["recheckProgress"] = 0
+	}
 	dst["error"] = qBTStateToTransmissionError(src.State)
 	dst["isStalled"] = qBTStateToTransmissionStalled(src.State)
 	dst["percentDone"] = src.Progress
