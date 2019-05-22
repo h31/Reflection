@@ -11,7 +11,6 @@ import (
 	"github.com/h31/Reflection/qBT"
 	"github.com/h31/Reflection/transmission"
 	log "github.com/sirupsen/logrus"
-	"hash/fnv"
 	"io/ioutil"
 	"math"
 	"mime/multipart"
@@ -358,9 +357,7 @@ func MapPropsTrackers(dst JsonMap, trackers []qBT.PropertiesTrackers) {
 	trackersList := make([]JsonMap, len(trackers))
 
 	for i, value := range trackers {
-		h := fnv.New32a()
-		h.Write([]byte(value.Url))
-		id := h.Sum32()
+		id := i
 		trackersList[i] = make(JsonMap)
 		trackersList[i]["announce"] = value.Url
 		trackersList[i]["id"] = id
@@ -375,9 +372,7 @@ func MapPropsTrackerStats(dst JsonMap, trackers []qBT.PropertiesTrackers, torren
 	trackerStats := make([]JsonMap, len(trackers))
 
 	for i, value := range trackers {
-		h := fnv.New32a()
-		h.Write([]byte(value.Url))
-		id := h.Sum32()
+		id := i
 
 		trackerStats[i] = make(JsonMap)
 		for key, value := range transmission.TrackerStatsTemplate {

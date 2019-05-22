@@ -39,7 +39,7 @@ func (c *Cache) GetOrFill(hash string, dest JsonMap, fillFunc func(dest JsonMap)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if ok, values := propsCache.isStillValid(hash, c.Timeout); ok {
+	if ok, values := c.isStillValid(hash, c.Timeout); ok {
 		log.WithField("hash", hash).Debug("Got info from cache")
 		dest.addAll(values)
 	} else {
@@ -47,7 +47,7 @@ func (c *Cache) GetOrFill(hash string, dest JsonMap, fillFunc func(dest JsonMap)
 		newValues := make(JsonMap)
 		fillFunc(newValues)
 		dest.addAll(newValues)
-		propsCache.fill(hash, newValues)
+		c.fill(hash, newValues)
 	}
 }
 
