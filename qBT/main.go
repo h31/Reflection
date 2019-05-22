@@ -111,8 +111,8 @@ func (q *Connection) AddNewCategory(category string) {
 	q.DoGET(url)
 }
 
-func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
-	propGeneralURL := q.MakeRequestURLWithParam("torrents/properties", map[string]string{"hash": q.GetHashForId(id)})
+func (q *Connection) GetPropsGeneral(hash string) (propGeneral PropertiesGeneral) {
+	propGeneralURL := q.MakeRequestURLWithParam("torrents/properties", map[string]string{"hash": hash})
 	propGeneralRaw := q.DoGET(propGeneralURL)
 
 	err := json.Unmarshal(propGeneralRaw, &propGeneral)
@@ -120,8 +120,8 @@ func (q *Connection) GetPropsGeneral(id int) (propGeneral PropertiesGeneral) {
 	return
 }
 
-func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
-	trackersURL := q.MakeRequestURLWithParam("torrents/trackers", map[string]string{"hash": q.GetHashForId(id)})
+func (q *Connection) GetPropsTrackers(hash string) (trackers []PropertiesTrackers) {
+	trackersURL := q.MakeRequestURLWithParam("torrents/trackers", map[string]string{"hash": hash})
 	trackersRaw := q.DoGET(trackersURL)
 
 	err := json.Unmarshal(trackersRaw, &trackers)
@@ -130,8 +130,8 @@ func (q *Connection) GetPropsTrackers(id int) (trackers []PropertiesTrackers) {
 	return
 }
 
-func (q *Connection) GetPiecesStates(id int) (pieces []byte) {
-	piecesURL := q.MakeRequestURLWithParam("torrents/pieceStates", map[string]string{"hash": q.GetHashForId(id)})
+func (q *Connection) GetPiecesStates(hash string) (pieces []byte) {
+	piecesURL := q.MakeRequestURLWithParam("torrents/pieceStates", map[string]string{"hash": hash})
 	piecesRaw := q.DoGET(piecesURL)
 
 	err := json.Unmarshal(piecesRaw, &pieces)
@@ -172,8 +172,8 @@ func (q *Connection) GetVersion() string {
 	return string(q.DoGET(versionURL))
 }
 
-func (q *Connection) GetPropsFiles(id int) (files []PropertiesFiles) {
-	filesURL := q.MakeRequestURLWithParam("torrents/files", map[string]string{"hash": q.GetHashForId(id)})
+func (q *Connection) GetPropsFiles(hash string) (files []PropertiesFiles) {
+	filesURL := q.MakeRequestURLWithParam("torrents/files", map[string]string{"hash": hash})
 	filesRaw := q.DoGET(filesURL)
 
 	err := json.Unmarshal(filesRaw, &files)

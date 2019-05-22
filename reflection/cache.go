@@ -1,46 +1,58 @@
 package main
 
 import (
+	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
 )
 
 type Cache struct {
-	Values *JsonMap
-	FilledAt time.Time
-	Valid bool
-	lock sync.Mutex
+	Timeout  time.Duration
+	Values   map[string]JsonMap
+	FilledAt map[string]time.Time
+	lock     sync.Mutex
 }
 
-func (c *Cache) invalidate() {
-	c.Valid = false
-}
-
-func (c *Cache) isStillValid(timeout time.Duration) (bool, *JsonMap) {
-	if c.Valid && time.Since(c.FilledAt) < timeout {
-		return true, c.Values
+func (c *Cache) isStillValid(hash string, timeout time.Duration) (bool, JsonMap) {
+	value, hasValue := c.Values[hash]
+	filledAt, hasFillTime := c.FilledAt[hash]
+	if hasValue && hasFillTime && time.Since(filledAt) < timeout {
+		return true, value
 	} else {
-		c.Valid = false
 		return false, nil
 	}
 }
 
-func (c *Cache) fill(data *JsonMap) {
-	c.Values = data
-	c.FilledAt = time.Now()
-	c.Valid = true
+func (c *Cache) fill(hash string, data JsonMap) {
+	if c.Values == nil {
+		c.Values = make(map[string]JsonMap)
+	}
+	c.Values[hash] = data
+
+	if c.FilledAt == nil {
+		c.FilledAt = make(map[string]time.Time)
+	}
+	c.FilledAt[hash] = time.Now()
 }
 
-func (c *Cache) GetOrFill(dest JsonMap, fillFunc func(dest JsonMap)) {
+func (c *Cache) GetOrFill(hash string, dest JsonMap, fillFunc func(dest JsonMap)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if ok, values := propsCache.isStillValid(15 * time.Second); ok {
-		dest.addAll(*values)
+	if ok, values := propsCache.isStillValid(hash, c.Timeout); ok {
+		log.WithField("hash", hash).Debug("Got info from cache")
+		dest.addAll(values)
 	} else {
+		log.WithField("hash", hash).Debug("Executing callback to fill the cache")
 		newValues := make(JsonMap)
 		fillFunc(newValues)
 		dest.addAll(newValues)
-		propsCache.fill(&newValues)
+		propsCache.fill(hash, newValues)
+	}
+}
+
+func (m JsonMap) addAll(source JsonMap) {
+	for key, value := range source {
+		m[key] = value
 	}
 }

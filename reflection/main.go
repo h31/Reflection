@@ -25,12 +25,12 @@ import (
 )
 
 var (
-	verbose              = flag.Bool("verbose", false, "Enable verbose output")
-	debug                = flag.Bool("debug", false, "Enable debug output")
-	apiAddr              = flag.String("api-addr", "http://localhost:8080/", "qBittorrent API address")
-	port                 = flag.Uint("port", 9091, "Transmission RPC port")
-	accurateTrackerStats = flag.Bool("accurate-tracker-stats", false, "Fast (and less precise) trackerStats response")
-	disableKeepAlive     = flag.Bool("disable-keep-alive", false, "Disable HTTP Keep-Alive in requests (may be necessary for older qBittorrent versions)")
+	verbose          = flag.Bool("verbose", false, "Enable verbose output")
+	debug            = flag.Bool("debug", false, "Enable debug output")
+	apiAddr          = flag.String("api-addr", "http://localhost:8080/", "qBittorrent API address")
+	port             = flag.Uint("port", 9091, "Transmission RPC port")
+	cacheTimeout     = flag.Uint("cache-timeout", 15, "Cache timeout (in seconds)")
+	disableKeepAlive = flag.Bool("disable-keep-alive", false, "Disable HTTP Keep-Alive in requests (may be necessary for older qBittorrent versions)")
 )
 
 func init() {
@@ -468,15 +468,9 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 	dst["wanted"] = wanted
 }
 
-var propsCache = Cache{}
-var trackersCache = Cache{}
-var trackerStatsCache = Cache{}
-
-func (m JsonMap) addAll(source JsonMap)  {
-	for key, value := range *source {
-		m[key] = value
-	}
-}
+var propsCache = Cache{Timeout: time.Duration(*cacheTimeout) * time.Second}
+var trackersCache = Cache{Timeout: time.Duration(*cacheTimeout) * time.Second}
+var trackerStatsCache = Cache{Timeout: time.Duration(*cacheTimeout) * time.Second}
 
 func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	var req transmission.GetRequest
@@ -502,9 +496,6 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 			trackersNeeded = true
 		case "trackerStats":
 			trackerStatsNeeded = true
-			if !*accurateTrackerStats {
-				additionalRequestsNeeded = false
-			}
 		case "peers":
 			peersNeeded = true
 		case "pieceSize", "pieceCount",
@@ -530,42 +521,35 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 
 		MapTorrentList(translated, torrentList, id) // TODO: Make it conditional too
 
+		hash := qBTConn.GetHashForId(id)
+
 		if propsGeneralNeeded {
-			log.Debug("Props required")
-			propsCache.GetOrFill(translated, func(dest JsonMap) {
-				propGeneral := qBTConn.GetPropsGeneral(id)
+			log.WithField("id", id).WithField("hash", hash).Debug("Props required")
+			propsCache.GetOrFill(hash, translated, func(dest JsonMap) {
+				propGeneral := qBTConn.GetPropsGeneral(hash)
 				MapPropsGeneral(dest, propGeneral)
 			})
-			if ok, values := propsCache.IsStillValid(15 * time.Second); ok {
-				translated.addAll(*values)
-			} else {
-				newValues := make(JsonMap)
-				propGeneral := qBTConn.GetPropsGeneral(id)
-				MapPropsGeneral(newValues, propGeneral)
-				translated.addAll(newValues)
-				propsCache.Fill(&newValues)
-			}
 		}
-		if trackersNeeded || (trackerStatsNeeded && *accurateTrackerStats) {
-			log.Debug("Trackers required")
-			trackers := qBTConn.GetPropsTrackers(id)
-			MapPropsTrackers(translated, trackers)
-			MapPropsTrackerStats(translated, trackers, getTorrentById(torrentList, id))
-		} else if trackerStatsNeeded {
-			MapPropsTrackerStatsFake(translated, getTorrentById(torrentList, id))
+		if trackersNeeded || trackerStatsNeeded {
+			log.WithField("id", id).WithField("hash", hash).Debug("Trackers required")
+			trackersCache.GetOrFill(hash, translated, func(dest JsonMap) {
+				trackers := qBTConn.GetPropsTrackers(hash)
+				MapPropsTrackers(dest, trackers)
+				MapPropsTrackerStats(dest, trackers, getTorrentById(torrentList, id))
+			})
 		}
 		if piecesNeeded {
-			log.Debug("Pieces required")
-			pieces := qBTConn.GetPiecesStates(id)
+			log.WithField("id", id).WithField("hash", hash).Debug("Pieces required")
+			pieces := qBTConn.GetPiecesStates(hash)
 			MapPieceStates(translated, pieces)
 		}
 		if filesNeeded {
-			log.Debug("Files required")
-			files := qBTConn.GetPropsFiles(id)
+			log.WithField("id", id).WithField("hash", hash).Debug("Files required")
+			files := qBTConn.GetPropsFiles(hash)
 			MapPropsFiles(translated, files)
 		}
 		if peersNeeded {
-			log.Debug("Peers required")
+			log.WithField("id", id).WithField("hash", hash).Debug("Peers required")
 			MapPropsPeers(translated, qBTConn.GetHashForId(id))
 		}
 
