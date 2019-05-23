@@ -184,7 +184,7 @@ const TR_STAT_OK = 0
 const TR_STATUS_LOCAL_ERROR = 3
 
 func qBTStateToTransmissionError(state string) int {
-	if state == "error" {
+	if state == "error" || state == "missingFiles" {
 		return TR_STATUS_LOCAL_ERROR // TR_STAT_LOCAL_ERROR
 	} else {
 		return TR_STAT_OK // TR_STAT_OK
@@ -215,13 +215,13 @@ func qBTStateToTransmissionStatus(state string) int {
 		return TR_STATUS_CHECK // TR_STATUS_CHECK
 	case "queuedDL":
 		return TR_STATUS_DOWNLOAD_WAIT // TR_STATUS_DOWNLOAD_WAIT
-	case "downloading", "stalledDL":
+	case "downloading", "stalledDL", "forceDL":
 		return TR_STATUS_DOWNLOAD // TR_STATUS_DOWNLOAD
 	case "queuedUP":
 		return TR_STATUS_SEED_WAIT // TR_STATUS_SEED_WAIT
-	case "uploading", "stalledUP":
+	case "uploading", "stalledUP", "forcedUP":
 		return TR_STATUS_SEED // TR_STATUS_SEED
-	case "error":
+	case "error", "missingFiles":
 		return TR_STATUS_STOPPED // TR_STATUS_STOPPED
 	default:
 		return TR_STATUS_STOPPED // TR_STATUS_STOPPED

@@ -18,7 +18,7 @@ type TorrentsList struct {
 	Num_leechs     int     //	Number of leechers connected to
 	Num_incomplete int     //	Number of leechers in the swarm
 	Ratio          float64 //	Torrent share ratio. Max ratio value: 9999.
-	Eta            int     //	Torrent ETA (seconds)
+	Eta            uint64  //	Torrent ETA (seconds)
 	State          string  //	Torrent state. See table here below for the possible values
 	Seq_dl         bool    //	True if sequential download is enabled
 	F_l_piece_prio bool    //	True if first last piece are prioritized
@@ -65,7 +65,7 @@ type PropertiesGeneral struct {
 	Created_by               string  //	Torrent creator
 	Dl_speed_avg             int     //	Torrent average download speed (bytes/second)
 	Dl_speed                 int     //	Torrent download speed (bytes/second)
-	Eta                      int     //	Torrent ETA (seconds)
+	Eta                      uint64  //	Torrent ETA (seconds)
 	Last_seen                int64   //	Last seen complete date (unix timestamp)
 	Peers                    int     //	Number of peers connected to
 	Peers_total              int     //	Number of peers in the swarm
