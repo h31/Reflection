@@ -50,7 +50,7 @@ var SessionGetBase = JsonMap{
 			"TB/s",
 		},
 	},
-	"version":     "2.84 (14307)",
+	"version": "2.84 (14307)",
 }
 
 var TorrentGetBase = JsonMap{
@@ -69,8 +69,9 @@ var TorrentGetBase = JsonMap{
 	"bandwidthPriority":       0,
 	"seedIdleLimit":           10,
 	"seedIdleMode":            0, // TR_IDLELIMIT_GLOBAL
+	"manualAnnounceTime":      0,
 	// TODO
-	"peers": []string{},
+	"peers":      []string{},
 	"magnetLink": "",
 }
 
@@ -93,7 +94,7 @@ var TrackerStatsTemplate = JsonMap{
 
 var SessionStatsTemplate = JsonMap{
 	"current-stats": map[string]int64{
-		"filesAdded":    13,
-		"sessionCount":  1,
+		"filesAdded":   13,
+		"sessionCount": 1,
 	},
 }
