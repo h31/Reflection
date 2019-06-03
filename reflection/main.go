@@ -469,7 +469,6 @@ func MapPropsFiles(dst JsonMap, filesInfo []qBT.PropertiesFiles) {
 
 var propsCache = Cache{Timeout: time.Duration(*cacheTimeout) * time.Second}
 var trackersCache = Cache{Timeout: time.Duration(*cacheTimeout) * time.Second}
-var trackerStatsCache = Cache{Timeout: time.Duration(*cacheTimeout) * time.Second}
 
 func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	var req transmission.GetRequest
@@ -479,6 +478,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	torrentList := qBTConn.GetTorrentList(nil)
 
 	ids := parseIDsArgument(req.Ids)
+	severalIDsRequired := len(ids) > 1
 	fields := req.Fields
 	filesNeeded := false
 	trackersNeeded := false
@@ -509,7 +509,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		default:
 			additionalRequestsNeeded = false
 		}
-		if additionalRequestsNeeded && req.Ids == nil {
+		if additionalRequestsNeeded && severalIDsRequired {
 			log.Info("Field which caused a full torrent scan (slow op!): " + field)
 		}
 	}
@@ -524,14 +524,14 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 
 		if propsGeneralNeeded {
 			log.WithField("id", id).WithField("hash", hash).Debug("Props required")
-			propsCache.GetOrFill(hash, translated, func(dest JsonMap) {
+			propsCache.GetOrFill(hash, translated, severalIDsRequired, func(dest JsonMap) {
 				propGeneral := qBTConn.GetPropsGeneral(hash)
 				MapPropsGeneral(dest, propGeneral)
 			})
 		}
 		if trackersNeeded || trackerStatsNeeded {
 			log.WithField("id", id).WithField("hash", hash).Debug("Trackers required")
-			trackersCache.GetOrFill(hash, translated, func(dest JsonMap) {
+			trackersCache.GetOrFill(hash, translated, severalIDsRequired, func(dest JsonMap) {
 				trackers := qBTConn.GetPropsTrackers(hash)
 				MapPropsTrackers(dest, trackers)
 				MapPropsTrackerStats(dest, trackers, getTorrentById(torrentList, id))

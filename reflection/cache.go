@@ -35,11 +35,11 @@ func (c *Cache) fill(hash string, data JsonMap) {
 	c.FilledAt[hash] = time.Now()
 }
 
-func (c *Cache) GetOrFill(hash string, dest JsonMap, fillFunc func(dest JsonMap)) {
+func (c *Cache) GetOrFill(hash string, dest JsonMap, cacheAllowed bool, fillFunc func(dest JsonMap)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if ok, values := c.isStillValid(hash, c.Timeout); ok {
+	if isCached, values := c.isStillValid(hash, c.Timeout); cacheAllowed && isCached {
 		log.WithField("hash", hash).Debug("Got info from cache")
 		dest.addAll(values)
 	} else {
