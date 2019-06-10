@@ -15,8 +15,8 @@ Currently Reflection is able to:
 
 Compatibility:
 * Reflection emulates the latest version of Transmission (2.84)
-* Tested against qBittorrent 4.0.3, should work with older versions too.
-* Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android
+* Requires at least qBittorrent 4.1.0. Older versions of Reflection also support previous qBittorrent versions.
+* Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android, Transmission-Qt and Transmission Remote by Yury Polek. Please fill an issue if you experience an incompatibility with some client.
 
 What features are not supported yet:
 * Set torrent properties (download/upload speed, etc)
@@ -37,12 +37,11 @@ General\Locale=en_US
 ## Usage:
 
 ```bash
-git clone https://github.com/h31/Reflection.git
+mkdir Reflection
 cd Reflection/
 export GOPATH=$(pwd)
-go get main
-go build main
-./main
+go get github.com/h31/Reflection/reflection
+./bin/reflection
 ```
 
 Use a `--help` flag to show settings. Default qBittorrent address is `http://localhost:8080/`.
