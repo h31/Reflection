@@ -24,12 +24,14 @@ func Any(vs []string, dst string) bool {
 
 func DoGetWithCookies(path string, cookies *string) []byte {
 	httpReq, err := http.NewRequest("GET", path, nil)
+	Check(err)
 	if cookies != nil {
 		header := http.Header{}
 		header.Add("Cookie", *cookies)
 		httpReq.Header = header
 	}
-	resp, err := qBTConn.Client.Do(httpReq)
+	cl := &http.Client{}
+	resp, err := cl.Do(httpReq)
 	Check(err)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)

@@ -750,7 +750,7 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 			}
 		}
 
-		//qBTConn.HashIds[value-1] = ""
+		//qBTConn.hashIds[value-1] = ""
 	}
 
 	joinedHashes := strings.Join(hashes, "|")
@@ -1026,7 +1026,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &req)
 	Check(err)
 
-	if !qBTConn.Auth.LoggedIn {
+	if !qBTConn.IsLoggedIn() {
 		var authOK = false
 		username, password, present := r.BasicAuth()
 		if present {
@@ -1082,7 +1082,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	log.Debug("respBody: ", string(respBody))
 	w.Header().Set("Content-Length", strconv.Itoa(len(respBody)))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write(respBody)
+	_, err = w.Write(respBody) // TODO: Check whether it's necessary to evaluate written bytes number
+	Check(err)
 }
 
 func main() {
@@ -1094,17 +1095,17 @@ func main() {
 	default:
 		log.SetLevel(log.WarnLevel)
 	}
-	qBTConn.Init(*apiAddr)
+	var cl *http.Client
 	if *disableKeepAlive {
 		log.Info("Disabled HTTP keep-alive")
-		qBTConn.Tr = &http.Transport{
+		tr := &http.Transport{
 			DisableKeepAlives: true,
 		}
-		qBTConn.Client = &http.Client{Transport: qBTConn.Tr}
+		cl = &http.Client{Transport: tr}
 	} else {
-		qBTConn.Tr = &http.Transport{}
-		qBTConn.Client = &http.Client{}
+		cl = &http.Client{}
 	}
+	qBTConn.Init(*apiAddr, cl)
 
 	http.HandleFunc("/transmission/rpc", handler)
 	http.HandleFunc("/rpc", handler)

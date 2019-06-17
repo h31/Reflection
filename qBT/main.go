@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 func check(e error) {
@@ -33,23 +34,27 @@ type Auth struct {
 }
 
 type Connection struct {
-	Addr *url.URL
-	// Hash to ID map. Array index is an ID
-	HashIds   []string
-	hashIdMap map[string]int
-	Tr        *http.Transport
-	Client    *http.Client
-	Auth      Auth
-	MainData  MainData
+	addr          *url.URL
+	hashIds       []string // Hash to ID map. Array index is an ID
+	hashIdMap     map[string]int
+	mutex         sync.RWMutex
+	client        *http.Client
+	auth          Auth
+	mainDataCache MainData
 }
 
-func (q *Connection) Init(baseUrl string) {
-	q.HashIds = make([]string, 0)
+func (q *Connection) Init(baseUrl string, client *http.Client) {
+	q.hashIds = make([]string, 0)
 	q.hashIdMap = make(map[string]int)
 
 	apiAddr, _ := url.Parse("api/v2/")
 	parsedBaseAddr, _ := url.Parse(baseUrl)
-	q.Addr = parsedBaseAddr.ResolveReference(apiAddr)
+	q.addr = parsedBaseAddr.ResolveReference(apiAddr)
+	q.client = client
+}
+
+func (q *Connection) IsLoggedIn() bool {
+	return q.auth.LoggedIn
 }
 
 func (q *Connection) MakeRequestURLWithParam(path string, params map[string]string) string {
@@ -58,7 +63,7 @@ func (q *Connection) MakeRequestURLWithParam(path string, params map[string]stri
 	}
 	parsedPath, err := url.Parse(path)
 	check(err)
-	u := q.Addr.ResolveReference(parsedPath)
+	u := q.addr.ResolveReference(parsedPath)
 	if len(params) > 0 {
 		query := u.Query()
 		for key, value := range params {
@@ -91,9 +96,9 @@ func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
 	url := q.MakeRequestURL("sync/maindata")
 	mainData := q.DoGET(url)
 
-	err := json.Unmarshal(mainData, &q.MainData)
+	err := json.Unmarshal(mainData, &q.mainDataCache)
 	checkAndLog(err, mainData)
-	for hash, torrentData := range *q.MainData.Torrents {
+	for hash, torrentData := range *q.mainDataCache.Torrents {
 		torrentData.Hash = hash
 		resp = append(resp, torrentData)
 	}
@@ -184,9 +189,9 @@ func (q *Connection) GetPropsFiles(hash string) (files []PropertiesFiles) {
 func (q *Connection) DoGET(url string) []byte {
 	req, err := http.NewRequest("GET", url, nil)
 	check(err)
-	req.AddCookie(&q.Auth.Cookie)
+	req.AddCookie(&q.auth.Cookie)
 
-	resp, err := q.Client.Do(req)
+	resp, err := q.client.Do(req)
 	check(err)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
@@ -197,9 +202,9 @@ func (q *Connection) DoPOST(url string, contentType string, body io.Reader) []by
 	req, err := http.NewRequest("POST", url, body)
 	check(err)
 	req.Header.Set("Content-Type", contentType)
-	req.AddCookie(&q.Auth.Cookie)
+	req.AddCookie(&q.auth.Cookie)
 
-	resp, err := q.Client.Do(req)
+	resp, err := q.client.Do(req)
 	check(err)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
@@ -211,19 +216,25 @@ func (q *Connection) PostForm(url string, data url.Values) []byte {
 }
 
 func (q *Connection) GetHashForId(id int) string {
-	if len(q.HashIds) >= id {
-		return q.HashIds[id-1]
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	if len(q.hashIds) >= id {
+		return q.hashIds[id-1]
 	} else {
 		return "a"
 	}
 }
 
 func (q *Connection) GetHashNum() int {
-	return len(q.HashIds)
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	return len(q.hashIds)
 }
 
 func (q *Connection) GetIdOfHash(hash string) (int, bool) {
+	q.mutex.RLock()
 	value, ok := q.hashIdMap[hash]
+	q.mutex.RUnlock()
 	return value + 1, ok
 }
 
@@ -235,16 +246,19 @@ func (q *Connection) Login(username, password string) bool {
 		if value != nil {
 			cookie := *value
 			if cookie.Name == "SID" {
-				q.Auth.LoggedIn = true
-				q.Auth.Cookie = cookie
+				q.auth.LoggedIn = true
+				q.auth.Cookie = cookie
 				break
 			}
 		}
 	}
-	return q.Auth.LoggedIn
+	return q.auth.LoggedIn
 }
 
 func (q *Connection) UpdateIDs(torrentsList []TorrentsList) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
 	keepHash := make(map[int]interface{})
 	addedCount := 0
 
@@ -253,10 +267,10 @@ func (q *Connection) UpdateIDs(torrentsList []TorrentsList) {
 		if index, exists := q.hashIdMap[newHash]; exists {
 			keepHash[index] = true
 		} else {
-			lastIndex := len(q.HashIds)
+			lastIndex := len(q.hashIds)
 			q.hashIdMap[newHash] = lastIndex
 			keepHash[lastIndex] = true
-			q.HashIds = append(q.HashIds, newHash)
+			q.hashIds = append(q.hashIds, newHash)
 			addedCount++
 		}
 	}
@@ -264,14 +278,14 @@ func (q *Connection) UpdateIDs(torrentsList []TorrentsList) {
 		log.WithField("num", addedCount).Info("Added new hashes to IDs table")
 	}
 
-	for i := 0; i < len(q.HashIds); i++ {
-		if q.HashIds[i] == "" {
+	for i := 0; i < len(q.hashIds); i++ {
+		if q.hashIds[i] == "" {
 			continue
 		}
 		if _, exists := keepHash[i]; !exists {
-			log.WithField("hash", q.HashIds[i]).Info("Hash disappeared from the torrent list")
-			delete(q.hashIdMap, q.HashIds[i])
-			q.HashIds[i] = ""
+			log.WithField("hash", q.hashIds[i]).Info("Hash disappeared from the torrent list")
+			delete(q.hashIdMap, q.hashIds[i])
+			q.hashIds[i] = ""
 		}
 	}
 }
