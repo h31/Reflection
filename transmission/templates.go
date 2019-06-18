@@ -15,7 +15,6 @@ var SessionGetBase = JsonMap{
 	"blocklist-url":                "http://www.example.com/blocklist",
 	"cache-size-mb":                4,
 	"config-dir":                   "/var/lib/transmission-daemon",
-	"download-dir-free-space":      float64(100 * (1 << 30)), // 100 GB
 	"idle-seeding-limit":           30,
 	"idle-seeding-limit-enabled":   false,
 	"queue-stalled-enabled":        true,
