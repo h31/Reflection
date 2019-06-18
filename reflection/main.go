@@ -134,10 +134,7 @@ func parseActionArgument(args json.RawMessage) []string {
 	return hashes
 }
 
-func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
-	var src qBT.TorrentsList
-	src = getTorrentById(torrentsList, id)
-
+func MapTorrentList(dst JsonMap, src qBT.TorrentsList) {
 	for key, value := range transmission.TorrentGetBase {
 		dst[key] = value
 	}
@@ -168,6 +165,11 @@ func MapTorrentList(dst JsonMap, torrentsList []qBT.TorrentsList, id int) {
 	dst["leftUntilDone"] = float64(src.Size) * (1 - src.Progress)
 	dst["desiredAvailable"] = float64(src.Size) * (1 - src.Progress) // TODO
 	dst["haveUnchecked"] = 0                                         // TODO
+	if src.State == "metaDL" || src.State == "pausedDL" {
+		dst["metadataPercentComplete"] = 0
+	} else {
+		dst["metadataPercentComplete"] = 1
+	}
 }
 
 func getTorrentById(torrentsList []qBT.TorrentsList, id int) (src qBT.TorrentsList) {
@@ -274,12 +276,27 @@ func EscapeString(in string) escapedString {
 	return escapedString(in)
 }
 
+func boolToYesNo(value bool) string {
+	if value {
+		return "yes"
+	} else {
+		return "no"
+	}
+}
+
+func addPropertiesToCommentField(dst JsonMap, torrentItem qBT.TorrentsList, propGeneral qBT.PropertiesGeneral) {
+	dst["comment"] = fmt.Sprintf("%s\n"+
+		" ----- \n"+
+		"Sequential download: %s\n"+
+		"First and last pieces first: %s", propGeneral.Comment,
+		boolToYesNo(torrentItem.Seq_dl), boolToYesNo(torrentItem.F_l_piece_prio))
+}
+
 func MapPropsGeneral(dst JsonMap, propGeneral qBT.PropertiesGeneral) {
 	dst["pieceSize"] = propGeneral.Piece_size
 	dst["pieceCount"] = propGeneral.Pieces_num
 	dst["addedDate"] = propGeneral.Addition_date
 	dst["startDate"] = propGeneral.Addition_date // TODO
-	dst["comment"] = propGeneral.Comment
 	dst["dateCreated"] = propGeneral.Creation_date
 	dst["creator"] = propGeneral.Created_by
 	dst["doneDate"] = propGeneral.Completion_date
@@ -518,7 +535,8 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	for i, id := range ids {
 		translated := make(JsonMap)
 
-		MapTorrentList(translated, torrentList, id) // TODO: Make it conditional too
+		torrentItem := getTorrentById(torrentList, id)
+		MapTorrentList(translated, torrentItem) // TODO: Make it conditional too
 
 		hash := qBTConn.GetHashForId(id)
 
@@ -527,6 +545,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 			propsCache.GetOrFill(hash, translated, severalIDsRequired, func(dest JsonMap) {
 				propGeneral := qBTConn.GetPropsGeneral(hash)
 				MapPropsGeneral(dest, propGeneral)
+				addPropertiesToCommentField(dest, torrentItem, propGeneral)
 			})
 		}
 		if trackersNeeded || trackerStatsNeeded {
@@ -534,7 +553,7 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 			trackersCache.GetOrFill(hash, translated, severalIDsRequired, func(dest JsonMap) {
 				trackers := qBTConn.GetPropsTrackers(hash)
 				MapPropsTrackers(dest, trackers)
-				MapPropsTrackerStats(dest, trackers, getTorrentById(torrentList, id))
+				MapPropsTrackerStats(dest, trackers, torrentItem)
 			})
 		}
 		if piecesNeeded {
