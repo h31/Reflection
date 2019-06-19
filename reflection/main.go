@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/Workiva/go-datastructures/bitarray"
@@ -16,6 +17,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -48,6 +50,20 @@ var deprecatedFields = []string{
 	"downloadLimitMode",
 	"uploadLimitMode",
 	"nextAnnounceTime",
+}
+
+type argumentValue int
+
+const (
+	ARGUMENT_NOT_SET argumentValue = iota
+	ARGUMENT_TRUE argumentValue = iota
+	ARGUMENT_FALSE argumentValue = iota
+)
+
+type additionalArguments struct {
+	sequentialDownload   argumentValue
+	firstLastPiecesFirst argumentValue
+	skipChecking         argumentValue
 }
 
 var qBTConn qBT.Connection
@@ -1002,40 +1018,80 @@ func TorrentSet(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success" // TODO
 }
 
+func concatenateIDs(ids []int) string {
+	hashes := make([]string, len(ids))
+	for i, id := range ids {
+		hashes[i] = qBTConn.GetHashForId(id)
+	}
+	return strings.Join(hashes, "|")
+}
+
+var additionalArgumentsRegexp = regexp.MustCompile("([+\\-])([sfh]+)$")
+
+func parseAdditionalLocationArguments(originalLocation string) (args additionalArguments, strippedLocation string, err error) {
+	strippedLocation = additionalArgumentsRegexp.ReplaceAllLiteralString(originalLocation, "")
+	submatches := additionalArgumentsRegexp.FindStringSubmatch(originalLocation)
+	if len(submatches) == 0 {
+		return
+	}
+	for _, c := range submatches[2] {
+		flagValue := ARGUMENT_NOT_SET
+		switch submatches[1] {
+		case "+":
+			flagValue = ARGUMENT_TRUE
+		case "-":
+			flagValue = ARGUMENT_FALSE
+		default:
+			err = errors.New("Unknown value: " + submatches[1])
+			return
+		}
+		switch c {
+		case 's':
+			args.sequentialDownload = flagValue
+		case 'f':
+			args.firstLastPiecesFirst = flagValue
+		case 'h':
+			args.skipChecking = flagValue
+		default:
+			err = errors.New("Unknown value: " + submatches[1])
+			return
+		}
+	}
+	return
+}
+
 func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
 	var req struct {
 		Ids      *json.RawMessage
-		Location *string     `json: "location"`
+		Location *string     `json:"location"`
 		Move     interface{} `json:"move"`
 	}
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
 	log.Debug("New location: ", *req.Location)
-	if req.Location != nil {
-		ids := parseIDsField(req.Ids)
-		if len(ids) != 1 {
-			log.Error("Unsupported torrent-set-location request")
-			return JsonMap{}, "Unsupported torrent-set-location request"
-		}
-		id := ids[0]
-
-		/*var move bool // TODO: Move to a function
-		switch val := req.Move.(type) {
-		case bool:
-			move = val
-		case float64:
-			move = (val != 0)
-		}*/
-
-		params := url.Values{
-			"hashes":   {qBTConn.GetHashForId(id)},
-			"location": {*req.Location},
-		}
-		qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/setLocation"), params)
+	if req.Location == nil {
+		return JsonMap{}, "Absent location field"
 	}
 
-	return JsonMap{}, "success" // TODO
+	ids := parseIDsField(req.Ids)
+	hashes := concatenateIDs(ids)
+
+	/*var move bool // TODO: Move to a function
+	switch val := req.Move.(type) {
+	case bool:
+		move = val
+	case float64:
+		move = (val != 0)
+	}*/
+
+	params := url.Values{
+		"hashes":   {hashes},
+		"location": {*req.Location},
+	}
+	qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/setLocation"), params)
+
+	return JsonMap{}, "success"
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
