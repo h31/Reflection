@@ -56,8 +56,8 @@ type argumentValue int
 
 const (
 	ARGUMENT_NOT_SET argumentValue = iota
-	ARGUMENT_TRUE argumentValue = iota
-	ARGUMENT_FALSE argumentValue = iota
+	ARGUMENT_TRUE    argumentValue = iota
+	ARGUMENT_FALSE   argumentValue = iota
 )
 
 type additionalArguments struct {
@@ -813,7 +813,27 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success"
 }
 
-func UploadTorrent(metainfo *[]byte, urls *string, destDir *string, paused bool) {
+func PutMIMEField(mime *multipart.Writer, fieldName string, value string) {
+	urlsWriter, err := mime.CreateFormField("urls")
+	Check(err)
+	_, err = urlsWriter.Write([]byte(value))
+	Check(err)
+}
+
+func AdditionalArgumentToString(value argumentValue) string {
+	switch value {
+	case ARGUMENT_NOT_SET:
+		return "" // TODO
+	case ARGUMENT_TRUE:
+		return "true"
+	case ARGUMENT_FALSE:
+		return "false"
+	default:
+		return ""
+	}
+}
+
+func UploadTorrent(metainfo *[]byte, urls *string, req *transmission.TorrentAddRequest, paused bool) {
 	var buffer bytes.Buffer
 	mime := multipart.NewWriter(&buffer)
 
@@ -824,16 +844,31 @@ func UploadTorrent(metainfo *[]byte, urls *string, destDir *string, paused bool)
 	}
 
 	if urls != nil {
-		urlsWriter, err := mime.CreateFormField("urls")
-		Check(err)
-		urlsWriter.Write([]byte(*urls))
+		PutMIMEField(mime, "urls", *urls)
 	}
 
-	if destDir != nil {
-		destDirWriter, err := mime.CreateFormField("savepath")
+	if req.Download_dir != nil {
+		extraArgs, strippedLocation, err := parseAdditionalLocationArguments(*req.Download_dir)
 		Check(err)
-		destDirWriter.Write([]byte(*destDir))
+
+		if extraArgs.sequentialDownload != ARGUMENT_NOT_SET {
+			PutMIMEField(mime, "sequentialDownload",
+				AdditionalArgumentToString(extraArgs.sequentialDownload))
+		}
+
+		if extraArgs.firstLastPiecesFirst != ARGUMENT_NOT_SET {
+			PutMIMEField(mime, "firstLastPiecePrio",
+				AdditionalArgumentToString(extraArgs.firstLastPiecesFirst))
+		}
+
+		if extraArgs.skipChecking != ARGUMENT_NOT_SET {
+			PutMIMEField(mime, "skip_checking",
+				AdditionalArgumentToString(extraArgs.skipChecking))
+		}
+
+		PutMIMEField(mime, "savepath", strippedLocation)
 	}
+
 	pausedWriter, err := mime.CreateFormField("paused")
 	Check(err)
 	if paused {
@@ -908,18 +943,18 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		log.Debug("Upload torrent from metainfo")
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
 		Check(err)
-		UploadTorrent(&metainfo, nil, req.Download_dir, paused)
+		UploadTorrent(&metainfo, nil, &req, paused)
 	} else if req.Filename != nil {
 		path := *req.Filename
 		if strings.HasPrefix(path, "magnet:?") {
 			newHash, newName = ParseMagnetLink(path)
 
-			UploadTorrent(nil, &path, req.Download_dir, paused)
+			UploadTorrent(nil, &path, &req, paused)
 		} else if strings.HasPrefix(path, "http") {
 			metainfo := DoGetWithCookies(path, req.Cookies)
 
 			newHash, newName = ParseMetainfo(metainfo)
-			UploadTorrent(&metainfo, nil, nil, paused)
+			UploadTorrent(&metainfo, nil, &req, paused)
 		}
 	}
 
@@ -1018,11 +1053,15 @@ func TorrentSet(args json.RawMessage) (JsonMap, string) {
 	return JsonMap{}, "success" // TODO
 }
 
-func concatenateIDs(ids []int) string {
-	hashes := make([]string, len(ids))
+func IDsToHashes(ids []int) (hashes []string) {
+	hashes = make([]string, len(ids))
 	for i, id := range ids {
 		hashes[i] = qBTConn.GetHashForId(id)
 	}
+	return
+}
+
+func concatenateHashes(hashes []string) string {
 	return strings.Join(hashes, "|")
 }
 
@@ -1075,7 +1114,7 @@ func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
 	}
 
 	ids := parseIDsField(req.Ids)
-	hashes := concatenateIDs(ids)
+	hashes := IDsToHashes(ids)
 
 	/*var move bool // TODO: Move to a function
 	switch val := req.Move.(type) {
@@ -1085,9 +1124,24 @@ func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
 		move = (val != 0)
 	}*/
 
+	extraArgs, strippedLocation, err := parseAdditionalLocationArguments(*req.Location)
+	Check(err)
+
+	if extraArgs.firstLastPiecesFirst != ARGUMENT_NOT_SET {
+		for _, hash := range hashes {
+			qBTConn.SetFirstLastPieceFirst(hash, extraArgs.firstLastPiecesFirst == ARGUMENT_TRUE)
+		}
+	}
+
+	if extraArgs.sequentialDownload != ARGUMENT_NOT_SET {
+		for _, hash := range hashes {
+			qBTConn.SetSequentialDownload(hash, extraArgs.sequentialDownload == ARGUMENT_TRUE)
+		}
+	}
+
 	params := url.Values{
-		"hashes":   {hashes},
-		"location": {*req.Location},
+		"hashes":   {concatenateHashes(hashes)},
+		"location": {strippedLocation},
 	}
 	qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/setLocation"), params)
 

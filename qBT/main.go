@@ -255,6 +255,27 @@ func (q *Connection) Login(username, password string) bool {
 	return q.auth.LoggedIn
 }
 
+func (q *Connection) SetToggleFlag(path string, hash string, newState bool) {
+	list := q.getTorrentListDirect(nil)
+	for _, listItem := range list {
+		if listItem.Hash == hash {
+			if listItem.Seq_dl != newState {
+				q.PostForm(q.MakeRequestURL("torrents/toggleSequentialDownload"),
+					url.Values{"hashes": {hash}})
+			}
+			return
+		}
+	}
+}
+
+func (q *Connection) SetSequentialDownload(hash string, newState bool) {
+	q.SetToggleFlag("torrents/toggleSequentialDownload", hash, newState)
+}
+
+func (q *Connection) SetFirstLastPieceFirst(hash string, newState bool) {
+	q.SetToggleFlag("torrents/toggleFirstLastPiecePrio", hash, newState)
+}
+
 func (q *Connection) UpdateIDs(torrentsList []TorrentsList) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
