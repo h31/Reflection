@@ -850,18 +850,22 @@ func UploadTorrent(metainfo *[]byte, urls *string, req *transmission.TorrentAddR
 	if req.Download_dir != nil {
 		extraArgs, strippedLocation, err := parseAdditionalLocationArguments(*req.Download_dir)
 		Check(err)
+		log.Debug("Stripped location is ", strippedLocation)
 
 		if extraArgs.sequentialDownload != ARGUMENT_NOT_SET {
+			log.Debug("Sequential download: ", AdditionalArgumentToString(extraArgs.sequentialDownload))
 			PutMIMEField(mime, "sequentialDownload",
 				AdditionalArgumentToString(extraArgs.sequentialDownload))
 		}
 
 		if extraArgs.firstLastPiecesFirst != ARGUMENT_NOT_SET {
+			log.Debug("FirstLastPiecePrio: ", AdditionalArgumentToString(extraArgs.firstLastPiecesFirst))
 			PutMIMEField(mime, "firstLastPiecePrio",
 				AdditionalArgumentToString(extraArgs.firstLastPiecesFirst))
 		}
 
 		if extraArgs.skipChecking != ARGUMENT_NOT_SET {
+			log.Debug("Skip checking: ", AdditionalArgumentToString(extraArgs.skipChecking))
 			PutMIMEField(mime, "skip_checking",
 				AdditionalArgumentToString(extraArgs.skipChecking))
 		}
