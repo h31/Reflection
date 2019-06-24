@@ -53,7 +53,7 @@ func TestWithStubs(t *testing.T) {
 	gock.New(apiAddr).
 		Get("/api/v2/torrents/info").
 		Reply(200).
-		File("torrent_list.json")
+		File("testdata/torrent_list.json")
 
 	gock.New(apiAddr).
 		Post("/api/v2/auth/login").
@@ -61,68 +61,10 @@ func TestWithStubs(t *testing.T) {
 		SetHeader("Set-Cookie", "SID=1")
 
 	// 1
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/properties").
-		MatchParam("hash", "cf7da7ab4d4e6125567bd979994f13bb1f23dddd").
-		Reply(200).
-		File("torrent_properties.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/trackers").
-		MatchParam("hash", "cf7da7ab4d4e6125567bd979994f13bb1f23dddd").
-		Reply(200).
-		File("torrent_trackers.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/pieceStates").
-		MatchParam("hash", "cf7da7ab4d4e6125567bd979994f13bb1f23dddd").
-		Reply(200).
-		File("torrent_piecestates.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/files").
-		MatchParam("hash", "cf7da7ab4d4e6125567bd979994f13bb1f23dddd").
-		Reply(200).
-		File("torrent_files.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/sync/torrentPeers").
-		MatchParam("hash", "cf7da7ab4d4e6125567bd979994f13bb1f23dddd").
-		MatchParam("rid", "0").
-		Reply(200).
-		File("torrent_peers.json")
+	setUpMocks(apiAddr, "cf7da7ab4d4e6125567bd979994f13bb1f23dddd", "1")
 
 	// 2
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/properties").
-		MatchParam("hash", "842783e3005495d5d1637f5364b59343c7844707").
-		Reply(200).
-		File("torrent_2_properties.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/trackers").
-		MatchParam("hash", "842783e3005495d5d1637f5364b59343c7844707").
-		Reply(200).
-		File("torrent_2_trackers.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/pieceStates").
-		MatchParam("hash", "842783e3005495d5d1637f5364b59343c7844707").
-		Reply(200).
-		File("torrent_2_piecestates.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/torrents/files").
-		MatchParam("hash", "842783e3005495d5d1637f5364b59343c7844707").
-		Reply(200).
-		File("torrent_2_files.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/sync/torrentPeers").
-		MatchParam("hash", "842783e3005495d5d1637f5364b59343c7844707").
-		MatchParam("rid", "0").
-		Reply(200).
-		File("torrent_2_peers.json")
+	setUpMocks(apiAddr, "842783e3005495d5d1637f5364b59343c7844707", "2")
 
 	client := &http.Client{Transport: &http.Transport{}}
 	gock.InterceptClient(client)
@@ -148,4 +90,33 @@ func TestWithStubs(t *testing.T) {
 	if *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
 		t.Fail()
 	}
+}
+
+func setUpMocks(apiAddr string, hash string, name string) {
+	gock.New(apiAddr).
+		Get("/api/v2/torrents/properties").
+		MatchParam("hash", hash).
+		Reply(200).
+		File("testdata/torrent_" + name + "_properties.json")
+	gock.New(apiAddr).
+		Get("/api/v2/torrents/trackers").
+		MatchParam("hash", hash).
+		Reply(200).
+		File("testdata/torrent_" + name + "_trackers.json")
+	gock.New(apiAddr).
+		Get("/api/v2/torrents/pieceStates").
+		MatchParam("hash", hash).
+		Reply(200).
+		File("testdata/torrent_" + name + "_piecestates.json")
+	gock.New(apiAddr).
+		Get("/api/v2/torrents/files").
+		MatchParam("hash", hash).
+		Reply(200).
+		File("testdata/torrent_" + name + "_files.json")
+	gock.New(apiAddr).
+		Get("/api/v2/sync/torrentPeers").
+		MatchParam("hash", hash).
+		MatchParam("rid", "0").
+		Reply(200).
+		File("testdata/torrent_" + name + "_peers.json")
 }

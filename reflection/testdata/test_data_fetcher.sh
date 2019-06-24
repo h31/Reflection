@@ -9,3 +9,5 @@ curl -o torrent_${num}_trackers.json    http://localhost:8080/api/v2/torrents/tr
 curl -o torrent_${num}_piecestates.json http://localhost:8080/api/v2/torrents/pieceStates?hash=$hash
 curl -o torrent_${num}_files.json       http://localhost:8080/api/v2/torrents/files?hash=$hash
 curl -o torrent_${num}_peers.json       http://localhost:8080/api/v2/sync/torrentPeers?hash=$hash\&rid=0
+
+curl -o sync_initial.json               http://localhost:8080/api/v2/sync/maindata?rid=0 --cookie cookie.txt --cookie-jar cookie.txt
