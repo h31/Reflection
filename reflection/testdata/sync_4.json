@@ -1,0 +1,11 @@
+{
+  "rid": 5,
+  "server_state": {
+    "alltime_dl": 12509584433,
+    "alltime_ul": 2764046829,
+    "free_space_on_disk": 71110983680
+  },
+  "torrents_removed": [
+    "7a1448be6d15bcde08ee9915350d0725775b73a3"
+  ]
+}
