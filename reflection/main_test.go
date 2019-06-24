@@ -82,13 +82,13 @@ func TestTorrentListing(t *testing.T) {
 	torrents, err := transmissionbt.TorrentGetAll()
 	Check(err)
 	if len(torrents) != 2 {
-		t.Fail()
+		t.Error("Number of torrents is not equal to 2")
 	}
-	if *torrents[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
-		t.Fail()
+	if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" && *torrents[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
+		t.Error("Unexpected torrent 0")
 	}
-	if *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
-		t.Fail()
+	if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" && *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
+		t.Error("Unexpected torrent 1")
 	}
 }
 
@@ -182,6 +182,9 @@ func TestSyncing(t *testing.T) {
 	Check(err)
 	if len(torrents) != 3 {
 		t.Error("Number of torrents is not equal to 3")
+	}
+	if *torrents[2].Name != "xubuntu-18.04.2-desktop-amd64.iso" {
+		t.Error("Unexpected torrent name")
 	}
 
 	torrents, err = transmissionbt.TorrentGetAll()
