@@ -280,15 +280,6 @@ func (q *Connection) GetTransferInfo() (info TransferInfo) {
 	return
 }
 
-func (q *Connection) GetMainData() (info TransferInfo) {
-	mainDataURL := q.MakeRequestURL("sync/maindata")
-	mainDataRaw := q.DoGET(mainDataURL)
-
-	err := json.Unmarshal(mainDataRaw, &info)
-	checkAndLog(err, mainDataRaw)
-	return
-}
-
 func (q *Connection) GetVersion() string {
 	versionURL := q.MakeRequestURL("app/version")
 	return string(q.DoGET(versionURL))
