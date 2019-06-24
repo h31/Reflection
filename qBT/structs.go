@@ -7,6 +7,7 @@ import "encoding/json"
 type JsonMap map[string]interface{}
 
 type TorrentInfo struct {
+	Id             ID      //   Transmission's ID
 	Hash           Hash    //	Torrent hash
 	Name           string  //	Torrent name
 	Size           int64   //	Total size (bytes) of files selected for download

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/hekmon/transmissionrpc"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/h2non/gock.v1"
 	"net"
 	"net/http"
@@ -45,6 +46,7 @@ func TestAdditionalLocationArguments(t *testing.T) {
 
 func TestWithStubs(t *testing.T) {
 	const apiAddr = "http://localhost:8080"
+	log.SetLevel(log.DebugLevel)
 
 	defer gock.Off()
 
@@ -125,7 +127,7 @@ func TestWithStubs(t *testing.T) {
 	client := &http.Client{Transport: &http.Transport{}}
 	gock.InterceptClient(client)
 
-	qBTConn.Init(apiAddr, client)
+	qBTConn.Init(apiAddr, client, false)
 	server := httptest.NewServer(http.HandlerFunc(handler))
 	defer server.Close()
 	defer server.CloseClientConnections()

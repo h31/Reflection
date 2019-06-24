@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/h31/Reflection/qBT"
 	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -8,12 +9,12 @@ import (
 
 type Cache struct {
 	Timeout  time.Duration
-	Values   map[string]JsonMap
-	FilledAt map[string]time.Time
+	Values   map[qBT.Hash]JsonMap
+	FilledAt map[qBT.Hash]time.Time
 	lock     sync.Mutex
 }
 
-func (c *Cache) isStillValid(hash string, timeout time.Duration) (bool, JsonMap) {
+func (c *Cache) isStillValid(hash qBT.Hash, timeout time.Duration) (bool, JsonMap) {
 	value, hasValue := c.Values[hash]
 	filledAt, hasFillTime := c.FilledAt[hash]
 	if hasValue && hasFillTime && time.Since(filledAt) < timeout {
@@ -23,19 +24,19 @@ func (c *Cache) isStillValid(hash string, timeout time.Duration) (bool, JsonMap)
 	}
 }
 
-func (c *Cache) fill(hash string, data JsonMap) {
+func (c *Cache) fill(hash qBT.Hash, data JsonMap) {
 	if c.Values == nil {
-		c.Values = make(map[string]JsonMap)
+		c.Values = make(map[qBT.Hash]JsonMap)
 	}
 	c.Values[hash] = data
 
 	if c.FilledAt == nil {
-		c.FilledAt = make(map[string]time.Time)
+		c.FilledAt = make(map[qBT.Hash]time.Time)
 	}
 	c.FilledAt[hash] = time.Now()
 }
 
-func (c *Cache) GetOrFill(hash string, dest JsonMap, cacheAllowed bool, fillFunc func(dest JsonMap)) {
+func (c *Cache) GetOrFill(hash qBT.Hash, dest JsonMap, cacheAllowed bool, fillFunc func(dest JsonMap)) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

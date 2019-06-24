@@ -38,7 +38,10 @@ type Hash string
 
 type ID int
 
-const RECENTLY_ACTIVE ID = -1
+const (
+	INVALID_ID         ID = -2
+	RECENTLY_ACTIVE_ID ID = -1
+)
 
 type Connection struct {
 	addr         *url.URL
@@ -54,22 +57,41 @@ type TorrentsList struct {
 	rid           int
 	mainDataCache MainData
 	hashIds       map[ID]Hash
-	hashIdMap     map[Hash]ID
-	mutex sync.RWMutex
+	//hashIdMap     map[Hash]ID
+	lastIndex ID
+	mutex     sync.RWMutex
 }
 
 func (list *TorrentsList) AllItems() map[Hash]*TorrentInfo {
 	return list.items
 }
 
-func (list *TorrentsList) GetActive() (resp map[Hash]*TorrentInfo) {
+func (list *TorrentsList) Slice() []*TorrentInfo {
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+
+	result := make([]*TorrentInfo, 0, len(list.items))
+	for _, item := range list.items {
+		result = append(result, item)
+	}
+	return result
+}
+
+func (list *TorrentsList) AllIDs() []ID {
+	result := make([]ID, list.ItemsNum())
+	for i := 0; i < list.ItemsNum(); i++ {
+		result[i] = ID(i + 1)
+	}
+	return result
+}
+
+func (list *TorrentsList) GetActive() (resp []*TorrentInfo) {
 	const timeout = 60 * time.Second
-	resp = make(map[Hash]*TorrentInfo)
 
 	for _, item := range list.items {
 		activity := list.activity[item.Hash]
 		if activity != nil && time.Since(*activity) < timeout {
-			resp[item.Hash] = item
+			resp = append(resp, item)
 		}
 	}
 	return
@@ -95,20 +117,18 @@ func (list *TorrentsList) ByHash(hash Hash) *TorrentInfo {
 	}
 }
 
-func (list *TorrentsList) IDByHash(hash Hash) *ID {
-	list.mutex.RLock()
-	defer list.mutex.RUnlock()
-	if item, ok := list.hashIdMap[hash]; ok {
-		return &item
-	} else {
-		return nil
-	}
-}
-
 func (list *TorrentsList) ItemsNum() int {
 	list.mutex.RLock()
 	defer list.mutex.RUnlock()
 	return len(list.hashIds)
+}
+
+func TorrentInfoListHashes(torrents []*TorrentInfo) []Hash {
+	hashesStrings := make([]Hash, len(torrents))
+	for i, torrent := range torrents {
+		hashesStrings[i] = torrent.Hash
+	}
+	return hashesStrings
 }
 
 func (q *Connection) Init(baseUrl string, client *http.Client, useSync bool) {
@@ -149,14 +169,21 @@ func (q *Connection) MakeRequestURL(path string) string {
 	return q.MakeRequestURLWithParam(path, map[string]string{})
 }
 
-func (q *Connection) UpdateTorrentListDirectly() (resp []TorrentsList) {
+func (q *Connection) UpdateTorrentListDirectly() {
+	torrents := make([]*TorrentInfo, 0)
+
 	params := map[string]string{}
 	url := q.MakeRequestURLWithParam("torrents/info", params)
-	torrents := q.DoGET(url)
+	torrentsJSON := q.DoGET(url)
 
-	err := json.Unmarshal(torrents, &resp)
-	checkAndLog(err, torrents)
-	return
+	err := json.Unmarshal(torrentsJSON, &torrents)
+	checkAndLog(err, torrentsJSON)
+
+	q.TorrentsList.items = make(map[Hash]*TorrentInfo)
+	for _, torrent := range torrents {
+		q.TorrentsList.items[torrent.Hash] = torrent
+		torrent.Id = INVALID_ID
+	}
 }
 
 func (q *Connection) UpdateCachedTorrentsList() {
@@ -186,8 +213,8 @@ func (q *Connection) UpdateTorrentsList() {
 		q.UpdateCachedTorrentsList()
 	} else {
 		q.UpdateTorrentListDirectly()
+		q.TorrentsList.UpdateIDsFullRescan()
 	}
-	q.TorrentsList.UpdateIDs()
 }
 
 func (q *Connection) AddNewCategory(category string) {
@@ -195,8 +222,8 @@ func (q *Connection) AddNewCategory(category string) {
 	q.DoGET(url)
 }
 
-func (q *Connection) GetPropsGeneral(hash string) (propGeneral PropertiesGeneral) {
-	propGeneralURL := q.MakeRequestURLWithParam("torrents/properties", map[string]string{"hash": hash})
+func (q *Connection) GetPropsGeneral(hash Hash) (propGeneral PropertiesGeneral) {
+	propGeneralURL := q.MakeRequestURLWithParam("torrents/properties", map[string]string{"hash": string(hash)})
 	propGeneralRaw := q.DoGET(propGeneralURL)
 
 	err := json.Unmarshal(propGeneralRaw, &propGeneral)
@@ -204,8 +231,8 @@ func (q *Connection) GetPropsGeneral(hash string) (propGeneral PropertiesGeneral
 	return
 }
 
-func (q *Connection) GetPropsTrackers(hash string) (trackers []PropertiesTrackers) {
-	trackersURL := q.MakeRequestURLWithParam("torrents/trackers", map[string]string{"hash": hash})
+func (q *Connection) GetPropsTrackers(hash Hash) (trackers []PropertiesTrackers) {
+	trackersURL := q.MakeRequestURLWithParam("torrents/trackers", map[string]string{"hash": string(hash)})
 	trackersRaw := q.DoGET(trackersURL)
 
 	err := json.Unmarshal(trackersRaw, &trackers)
@@ -214,8 +241,8 @@ func (q *Connection) GetPropsTrackers(hash string) (trackers []PropertiesTracker
 	return
 }
 
-func (q *Connection) GetPiecesStates(hash string) (pieces []byte) {
-	piecesURL := q.MakeRequestURLWithParam("torrents/pieceStates", map[string]string{"hash": hash})
+func (q *Connection) GetPiecesStates(hash Hash) (pieces []byte) {
+	piecesURL := q.MakeRequestURLWithParam("torrents/pieceStates", map[string]string{"hash": string(hash)})
 	piecesRaw := q.DoGET(piecesURL)
 
 	err := json.Unmarshal(piecesRaw, &pieces)
@@ -256,8 +283,8 @@ func (q *Connection) GetVersion() string {
 	return string(q.DoGET(versionURL))
 }
 
-func (q *Connection) GetPropsFiles(hash string) (files []PropertiesFiles) {
-	filesURL := q.MakeRequestURLWithParam("torrents/files", map[string]string{"hash": hash})
+func (q *Connection) GetPropsFiles(hash Hash) (files []PropertiesFiles) {
+	filesURL := q.MakeRequestURLWithParam("torrents/files", map[string]string{"hash": string(hash)})
 	filesRaw := q.DoGET(filesURL)
 
 	err := json.Unmarshal(filesRaw, &files)
@@ -311,6 +338,11 @@ func (q *Connection) Login(username, password string) bool {
 	return q.auth.LoggedIn
 }
 
+func (q *Connection) PostWithHashes(path string, torrents []*TorrentInfo) {
+	hashes := ConcatenateHashes(torrents)
+	q.PostForm(q.MakeRequestURL(path), url.Values{"hashes": {hashes}})
+}
+
 func (q *Connection) SetToggleFlag(path string, hash Hash, newState bool) {
 	item := q.TorrentsList.ByHash(hash)
 	if item.Seq_dl != newState {
@@ -328,34 +360,39 @@ func (q *Connection) SetFirstLastPieceFirst(hash Hash, newState bool) {
 	q.SetToggleFlag("torrents/toggleFirstLastPiecePrio", hash, newState)
 }
 
-func (list *TorrentsList) UpdateIDs() {
+func ConcatenateHashes(torrents []*TorrentInfo) string {
+	hashesStrings := make([]string, len(torrents))
+	for i, torrent := range torrents {
+		hashesStrings[i] = string(torrent.Hash)
+	}
+	return strings.Join(hashesStrings, "|")
+}
+
+func (list *TorrentsList) UpdateIDsFullRescan() {
 	list.mutex.Lock()
 	defer list.mutex.Unlock()
 
-	keepHashes := make(map[ID]bool)
 	addedCount := 0
 
-	for hash, _ := range list.items {
-		if index, exists := list.hashIdMap[hash]; exists {
-			keepHashes[index] = true
+	for id, hash := range list.hashIds {
+		if torrent, exists := list.items[hash]; exists {
+			torrent.Id = id
 		} else {
-			var lastIndex = ID(len(list.hashIds))
-			list.hashIdMap[hash] = lastIndex
-			keepHashes[lastIndex] = true
-			list.hashIds[lastIndex] = hash
+			log.WithField("hash", hash).WithField("id", id).Info("Hash disappeared from the torrent list")
+			delete(list.hashIds, id)
+		}
+	}
+
+	for hash, torrent := range list.items {
+		if torrent.Id == INVALID_ID {
+			list.hashIds[list.lastIndex] = hash
+			torrent.Id = list.lastIndex
+			list.lastIndex++
 			addedCount++
 		}
 	}
 
 	if addedCount > 0 {
 		log.WithField("num", addedCount).Info("Added new hashes to IDs table")
-	}
-
-	for id, hash := range list.hashIds {
-		if _, exists := keepHashes[id]; !exists {
-			log.WithField("hash", hash).Info("Hash disappeared from the torrent list")
-			delete(list.hashIdMap, hash)
-			delete(list.hashIds, id)
-		}
 	}
 }
