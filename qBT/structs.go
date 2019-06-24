@@ -112,7 +112,7 @@ type MainData struct {
 	Rid                int
 	Full_update        bool
 	Torrents           *map[Hash]json.RawMessage
-	Torrents_removed   []string
+	Torrents_removed   []Hash
 	Categories         []string
 	Categories_removed []string
 	Queueing           bool
