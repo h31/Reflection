@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -186,7 +187,7 @@ func (q *Connection) UpdateTorrentListDirectly() {
 
 func (q *Connection) UpdateCachedTorrentsList() (added, deleted []*TorrentInfo) {
 	torrentsList := &q.TorrentsList
-	url := q.MakeRequestURLWithParam("sync/maindata", map[string]string{"rid": string(torrentsList.rid)})
+	url := q.MakeRequestURLWithParam("sync/maindata", map[string]string{"rid": strconv.Itoa(torrentsList.rid)})
 	mainData := q.DoGET(url)
 
 	mainDataCache := MainData{}
@@ -197,8 +198,9 @@ func (q *Connection) UpdateCachedTorrentsList() (added, deleted []*TorrentInfo) 
 	now := time.Now()
 	for _, deletedHash := range mainDataCache.Torrents_removed {
 		deleted = append(deleted, torrentsList.items[deletedHash])
+		delete(torrentsList.items, deletedHash)
 	}
-	for hash, rawTorrentData := range *mainDataCache.Torrents {
+	for hash, rawTorrentData := range mainDataCache.Torrents {
 		torrent, exists := torrentsList.items[hash]
 		if !exists {
 			torrent = &TorrentInfo{Id: INVALID_ID}
@@ -415,6 +417,7 @@ func (list *TorrentsList) UpdateIDsSynced(added, deleted []*TorrentInfo) {
 
 	for _, torrent := range added {
 		if torrent.Id == INVALID_ID {
+			log.WithField("hash", torrent.Hash).WithField("id", list.lastIndex).Info("Torrent got assigned ID")
 			list.hashIds[list.lastIndex] = torrent.Hash
 			torrent.Id = list.lastIndex
 			list.lastIndex++

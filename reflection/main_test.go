@@ -44,7 +44,7 @@ func TestAdditionalLocationArguments(t *testing.T) {
 	}
 }
 
-func TestWithStubs(t *testing.T) {
+func TestTorrentListing(t *testing.T) {
 	const apiAddr = "http://localhost:8080"
 	log.SetLevel(log.DebugLevel)
 
@@ -92,31 +92,141 @@ func TestWithStubs(t *testing.T) {
 	}
 }
 
+func TestSyncing(t *testing.T) {
+	const apiAddr = "http://localhost:8080"
+	log.SetLevel(log.DebugLevel)
+
+	defer gock.Off()
+
+	gock.New(apiAddr).
+		Post("/api/v2/auth/login").
+		Reply(200).
+		SetHeader("Set-Cookie", "SID=1")
+
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "0").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_initial.json")
+
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "1").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_1.json")
+
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "2").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_2.json")
+
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "3").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_3.json")
+
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "4").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_4.json")
+
+	// 1
+	setUpMocks(apiAddr, "cf7da7ab4d4e6125567bd979994f13bb1f23dddd", "1")
+
+	// 2
+	setUpMocks(apiAddr, "842783e3005495d5d1637f5364b59343c7844707", "2")
+
+	// 3
+	setUpMocks(apiAddr, "7a1448be6d15bcde08ee9915350d0725775b73a3", "3")
+
+	client := &http.Client{Transport: &http.Transport{}}
+	gock.InterceptClient(client)
+
+	qBTConn.Init(apiAddr, client, true)
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+	defer server.CloseClientConnections()
+	serverAddr := server.Listener.Addr().(*net.TCPAddr)
+	println(serverAddr.IP.String())
+
+	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
+		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
+	Check(err)
+	torrents, err := transmissionbt.TorrentGetAll()
+	Check(err)
+	if len(torrents) != 2 {
+		t.Error("Number of torrents is not equal to 2")
+	}
+	if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" && *torrents[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
+		t.Error("Unexpected torrent 0")
+	}
+	if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" && *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
+		t.Error("Unexpected torrent 1")
+	}
+
+	torrents, err = transmissionbt.TorrentGetAll()
+	Check(err)
+	if len(torrents) != 2 {
+		t.Error("Number of torrents is not equal to 2")
+	}
+
+	torrents, err = transmissionbt.TorrentGetAll()
+	Check(err)
+	if len(torrents) != 3 {
+		t.Error("Number of torrents is not equal to 3")
+	}
+
+	torrents, err = transmissionbt.TorrentGetAll()
+	Check(err)
+	if len(torrents) != 3 {
+		t.Error("Number of torrents is not equal to 3")
+	}
+
+	torrents, err = transmissionbt.TorrentGetAll()
+	Check(err)
+	if len(torrents) != 2 {
+		t.Error("Number of torrents is not equal to 2")
+	}
+}
+
 func setUpMocks(apiAddr string, hash string, name string) {
 	gock.New(apiAddr).
 		Get("/api/v2/torrents/properties").
 		MatchParam("hash", hash).
+		Persist().
 		Reply(200).
 		File("testdata/torrent_" + name + "_properties.json")
 	gock.New(apiAddr).
 		Get("/api/v2/torrents/trackers").
 		MatchParam("hash", hash).
+		Persist().
 		Reply(200).
 		File("testdata/torrent_" + name + "_trackers.json")
 	gock.New(apiAddr).
 		Get("/api/v2/torrents/pieceStates").
 		MatchParam("hash", hash).
+		Persist().
 		Reply(200).
 		File("testdata/torrent_" + name + "_piecestates.json")
 	gock.New(apiAddr).
 		Get("/api/v2/torrents/files").
 		MatchParam("hash", hash).
+		Persist().
 		Reply(200).
 		File("testdata/torrent_" + name + "_files.json")
 	gock.New(apiAddr).
 		Get("/api/v2/sync/torrentPeers").
 		MatchParam("hash", hash).
 		MatchParam("rid", "0").
+		Persist().
 		Reply(200).
 		File("testdata/torrent_" + name + "_peers.json")
 }

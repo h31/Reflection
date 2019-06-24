@@ -111,10 +111,10 @@ type TransferInfo struct {
 type MainData struct {
 	Rid                int
 	Full_update        bool
-	Torrents           *map[Hash]json.RawMessage
+	Torrents           map[Hash]json.RawMessage
 	Torrents_removed   []Hash
-	Categories         []string
-	Categories_removed []string
+	Categories         *json.RawMessage
+	Categories_removed *json.RawMessage
 	Queueing           bool
 	Server_state       *TransferInfo
 }
