@@ -1,11 +1,13 @@
 package qBT
 
+import "encoding/json"
+
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-Documentation
 
 type JsonMap map[string]interface{}
 
-type TorrentsList struct {
-	Hash           string  //	Torrent hash
+type TorrentInfo struct {
+	Hash           Hash    //	Torrent hash
 	Name           string  //	Torrent name
 	Size           int64   //	Total size (bytes) of files selected for download
 	Total_size     int64   //	Torrent total size (bytes)
@@ -108,7 +110,7 @@ type TransferInfo struct {
 type MainData struct {
 	Rid                int
 	Full_update        bool
-	Torrents           *map[string]TorrentsList
+	Torrents           *map[Hash]json.RawMessage
 	Torrents_removed   []string
 	Categories         []string
 	Categories_removed []string

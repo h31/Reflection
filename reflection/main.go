@@ -32,6 +32,7 @@ var (
 	port             = flag.Uint("port", 9091, "Transmission RPC port")
 	cacheTimeout     = flag.Uint("cache-timeout", 15, "Cache timeout (in seconds)")
 	disableKeepAlive = flag.Bool("disable-keep-alive", false, "Disable HTTP Keep-Alive in requests (may be necessary for older qBittorrent versions)")
+	useSync          = flag.Bool("sync", true, "Use Sync endpoint (recommended)")
 )
 
 func init() {
@@ -77,25 +78,29 @@ func IsFieldDeprecated(field string) bool {
 	return false
 }
 
-func parseIDsArgument(args *json.RawMessage) []int {
+func parseIDsArgument(args *json.RawMessage) []qBT.ID {
 	allIds := parseIDsField(args)
-	filtered := make([]int, 0)
+	filtered := make([]qBT.ID, 0)
 	for _, id := range allIds {
-		if qBTConn.GetHashForId(id) != "" {
+		if qBTConn.TorrentsList.ByID(id) != nil {
 			filtered = append(filtered, id)
 		}
 	}
 	return filtered
 }
 
-func parseIDsField(args *json.RawMessage) []int {
+func allIDs() []qBT.ID {
+	result := make([]qBT.ID, qBTConn.TorrentsList.ItemsNum())
+	for i := 0; i < qBTConn.TorrentsList.ItemsNum(); i++ {
+		result[i] = qBT.ID(i + 1)
+	}
+	return result
+}
+
+func parseIDsField(args *json.RawMessage) []qBT.ID {
 	if args == nil {
 		log.Debug("No IDs provided")
-		result := make([]int, qBTConn.GetHashNum())
-		for i := 0; i < qBTConn.GetHashNum(); i++ {
-			result[i] = i + 1
-		}
-		return result
+		return allIDs()
 	}
 
 	var ids interface{}
@@ -105,33 +110,43 @@ func parseIDsField(args *json.RawMessage) []int {
 	switch ids := ids.(type) {
 	case float64:
 		log.Debug("Query a single ID")
-		return []int{int(ids)}
+		return []qBT.ID{qBT.ID(ids)}
 	case []interface{}:
 		log.Debug("Query an ID list of length ", len(ids))
-		result := make([]int, len(ids))
+		result := make([]qBT.ID, len(ids))
 		for i, value := range ids {
 			switch id := value.(type) {
 			case float64:
-				result[i] = int(id)
+				result[i] = qBT.ID(id)
 			case string:
-				var exists bool
-				result[i], exists = qBTConn.GetIdOfHash(id)
-				if !exists {
+				hash := qBT.Hash(id)
+				fetchedID := qBTConn.TorrentsList.IDByHash(hash)
+				if fetchedID == nil {
 					panic("hash not found")
 				}
+				result[i] = *fetchedID
 			}
 		}
 		return result
 	case string:
-		log.Debug("Query recently-active") // TODO
-		result := make([]int, qBTConn.GetHashNum())
-		for i := 0; i < qBTConn.GetHashNum(); i++ {
-			result[i] = i + 1
+		log.Debug("Query recently-active")
+		if *useSync {
+			active := qBTConn.TorrentsList.GetActive()
+			result := make([]qBT.ID, 0) // TODO: Use len
+			for hash, _ := range active {
+				id := qBTConn.TorrentsList.IDByHash(hash)
+				if id == nil {
+					panic("hash not found")
+				}
+				result = append(result, *id)
+			}
+			return result
+		} else {
+			return allIDs()
 		}
-		return result
 	default:
 		log.Error("Unknown action")
-		return []int{}
+		return []qBT.ID{}
 	}
 }
 
@@ -507,8 +522,6 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	var req transmission.GetRequest
 	err := json.Unmarshal(args, &req)
 	Check(err)
-
-	torrentList := qBTConn.GetTorrentList(nil)
 
 	ids := parseIDsArgument(req.Ids)
 	severalIDsRequired := len(ids) > 1

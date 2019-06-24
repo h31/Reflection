@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 func check(e error) {
@@ -33,19 +34,88 @@ type Auth struct {
 	Cookie   http.Cookie
 }
 
+type Hash string
+
+type ID int
+
+const RECENTLY_ACTIVE ID = -1
+
 type Connection struct {
-	addr          *url.URL
-	hashIds       []string // Hash to ID map. Array index is an ID
-	hashIdMap     map[string]int
-	mutex         sync.RWMutex
-	client        *http.Client
-	auth          Auth
-	mainDataCache MainData
+	addr         *url.URL
+	client       *http.Client
+	auth         Auth
+	TorrentsList TorrentsList
 }
 
-func (q *Connection) Init(baseUrl string, client *http.Client) {
-	q.hashIds = make([]string, 0)
-	q.hashIdMap = make(map[string]int)
+type TorrentsList struct {
+	useSync       bool
+	items         map[Hash]*TorrentInfo
+	activity      map[Hash]*time.Time
+	rid           int
+	mainDataCache MainData
+	hashIds       map[ID]Hash
+	hashIdMap     map[Hash]ID
+	mutex sync.RWMutex
+}
+
+func (list *TorrentsList) AllItems() map[Hash]*TorrentInfo {
+	return list.items
+}
+
+func (list *TorrentsList) GetActive() (resp map[Hash]*TorrentInfo) {
+	const timeout = 60 * time.Second
+	resp = make(map[Hash]*TorrentInfo)
+
+	for _, item := range list.items {
+		activity := list.activity[item.Hash]
+		if activity != nil && time.Since(*activity) < timeout {
+			resp[item.Hash] = item
+		}
+	}
+	return
+}
+
+func (list *TorrentsList) ByID(id ID) *TorrentInfo {
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+	if hash, ok := list.hashIds[id]; ok {
+		return list.items[hash]
+	} else {
+		return nil
+	}
+}
+
+func (list *TorrentsList) ByHash(hash Hash) *TorrentInfo {
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+	if item, ok := list.items[hash]; ok {
+		return item
+	} else {
+		return nil
+	}
+}
+
+func (list *TorrentsList) IDByHash(hash Hash) *ID {
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+	if item, ok := list.hashIdMap[hash]; ok {
+		return &item
+	} else {
+		return nil
+	}
+}
+
+func (list *TorrentsList) ItemsNum() int {
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+	return len(list.hashIds)
+}
+
+func (q *Connection) Init(baseUrl string, client *http.Client, useSync bool) {
+	q.TorrentsList.items = make(map[Hash]*TorrentInfo, 0)
+	q.TorrentsList.activity = make(map[Hash]*time.Time)
+	q.TorrentsList.hashIds = make(map[ID]Hash)
+	q.TorrentsList.useSync = useSync
 
 	apiAddr, _ := url.Parse("api/v2/")
 	parsedBaseAddr, _ := url.Parse(baseUrl)
@@ -79,11 +149,8 @@ func (q *Connection) MakeRequestURL(path string) string {
 	return q.MakeRequestURLWithParam(path, map[string]string{})
 }
 
-func (q *Connection) getTorrentListDirect(category *string) (resp []TorrentsList) {
+func (q *Connection) UpdateTorrentListDirectly() (resp []TorrentsList) {
 	params := map[string]string{}
-	if category != nil {
-		params["category"] = *category
-	}
 	url := q.MakeRequestURLWithParam("torrents/info", params)
 	torrents := q.DoGET(url)
 
@@ -92,23 +159,35 @@ func (q *Connection) getTorrentListDirect(category *string) (resp []TorrentsList
 	return
 }
 
-func (q *Connection) getTorrentListCached() (resp []TorrentsList) {
-	url := q.MakeRequestURL("sync/maindata")
+func (q *Connection) UpdateCachedTorrentsList() {
+	torrentsList := &q.TorrentsList
+	url := q.MakeRequestURLWithParam("sync/maindata", map[string]string{"rid": string(torrentsList.rid)})
 	mainData := q.DoGET(url)
 
-	err := json.Unmarshal(mainData, &q.mainDataCache)
+	err := json.Unmarshal(mainData, &torrentsList.mainDataCache)
 	checkAndLog(err, mainData)
-	for hash, torrentData := range *q.mainDataCache.Torrents {
-		torrentData.Hash = hash
-		resp = append(resp, torrentData)
+	torrentsList.rid = torrentsList.mainDataCache.Rid
+	now := time.Now()
+	for hash, rawTorrentData := range *torrentsList.mainDataCache.Torrents {
+		torrentListItem, ok := torrentsList.items[hash]
+		if !ok {
+			torrentListItem = &TorrentInfo{}
+			torrentsList.items[hash] = torrentListItem
+		}
+		err := json.Unmarshal(rawTorrentData, torrentListItem)
+		checkAndLog(err, mainData)
+		torrentListItem.Hash = hash
+		torrentsList.activity[hash] = &now
 	}
-	return
 }
 
-func (q *Connection) GetTorrentList(category *string) (resp []TorrentsList) {
-	resp = q.getTorrentListDirect(category)
-	q.UpdateIDs(resp)
-	return
+func (q *Connection) UpdateTorrentsList() {
+	if q.TorrentsList.useSync {
+		q.UpdateCachedTorrentsList()
+	} else {
+		q.UpdateTorrentListDirectly()
+	}
+	q.TorrentsList.UpdateIDs()
 }
 
 func (q *Connection) AddNewCategory(category string) {
@@ -215,29 +294,6 @@ func (q *Connection) PostForm(url string, data url.Values) []byte {
 	return q.DoPOST(url, "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
 }
 
-func (q *Connection) GetHashForId(id int) string {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
-	if len(q.hashIds) >= id {
-		return q.hashIds[id-1]
-	} else {
-		return "a"
-	}
-}
-
-func (q *Connection) GetHashNum() int {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
-	return len(q.hashIds)
-}
-
-func (q *Connection) GetIdOfHash(hash string) (int, bool) {
-	q.mutex.RLock()
-	value, ok := q.hashIdMap[hash]
-	q.mutex.RUnlock()
-	return value + 1, ok
-}
-
 func (q *Connection) Login(username, password string) bool {
 	resp, err := http.PostForm(q.MakeRequestURL("auth/login"),
 		url.Values{"username": {username}, "password": {password}})
@@ -255,58 +311,51 @@ func (q *Connection) Login(username, password string) bool {
 	return q.auth.LoggedIn
 }
 
-func (q *Connection) SetToggleFlag(path string, hash string, newState bool) {
-	list := q.getTorrentListDirect(nil)
-	for _, listItem := range list {
-		if listItem.Hash == hash {
-			if listItem.Seq_dl != newState {
-				q.PostForm(q.MakeRequestURL("torrents/toggleSequentialDownload"),
-					url.Values{"hashes": {hash}})
-			}
-			return
-		}
+func (q *Connection) SetToggleFlag(path string, hash Hash, newState bool) {
+	item := q.TorrentsList.ByHash(hash)
+	if item.Seq_dl != newState {
+		q.PostForm(q.MakeRequestURL(path),
+			url.Values{"hashes": {string(hash)}})
 	}
+	return
 }
 
-func (q *Connection) SetSequentialDownload(hash string, newState bool) {
+func (q *Connection) SetSequentialDownload(hash Hash, newState bool) {
 	q.SetToggleFlag("torrents/toggleSequentialDownload", hash, newState)
 }
 
-func (q *Connection) SetFirstLastPieceFirst(hash string, newState bool) {
+func (q *Connection) SetFirstLastPieceFirst(hash Hash, newState bool) {
 	q.SetToggleFlag("torrents/toggleFirstLastPiecePrio", hash, newState)
 }
 
-func (q *Connection) UpdateIDs(torrentsList []TorrentsList) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+func (list *TorrentsList) UpdateIDs() {
+	list.mutex.Lock()
+	defer list.mutex.Unlock()
 
-	keepHash := make(map[int]interface{})
+	keepHashes := make(map[ID]bool)
 	addedCount := 0
 
-	for _, torrent := range torrentsList {
-		newHash := torrent.Hash
-		if index, exists := q.hashIdMap[newHash]; exists {
-			keepHash[index] = true
+	for hash, _ := range list.items {
+		if index, exists := list.hashIdMap[hash]; exists {
+			keepHashes[index] = true
 		} else {
-			lastIndex := len(q.hashIds)
-			q.hashIdMap[newHash] = lastIndex
-			keepHash[lastIndex] = true
-			q.hashIds = append(q.hashIds, newHash)
+			var lastIndex = ID(len(list.hashIds))
+			list.hashIdMap[hash] = lastIndex
+			keepHashes[lastIndex] = true
+			list.hashIds[lastIndex] = hash
 			addedCount++
 		}
 	}
+
 	if addedCount > 0 {
 		log.WithField("num", addedCount).Info("Added new hashes to IDs table")
 	}
 
-	for i := 0; i < len(q.hashIds); i++ {
-		if q.hashIds[i] == "" {
-			continue
-		}
-		if _, exists := keepHash[i]; !exists {
-			log.WithField("hash", q.hashIds[i]).Info("Hash disappeared from the torrent list")
-			delete(q.hashIdMap, q.hashIds[i])
-			q.hashIds[i] = ""
+	for id, hash := range list.hashIds {
+		if _, exists := keepHashes[id]; !exists {
+			log.WithField("hash", hash).Info("Hash disappeared from the torrent list")
+			delete(list.hashIdMap, hash)
+			delete(list.hashIds, id)
 		}
 	}
 }
