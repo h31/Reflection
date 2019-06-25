@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 var currentLogLevel = log.DebugLevel
@@ -257,6 +258,68 @@ func TestSyncingRecentlyActive(t *testing.T) {
 		err = transmissionbt.TorrentStartRecentlyActive()
 		Check(err)
 	}
+}
+
+func TestSyncingRecentlyActiveLong(t *testing.T) {
+	const apiAddr = "http://localhost:8080"
+	log.SetLevel(currentLogLevel)
+
+	defer gock.Off()
+
+	gock.Observe(gock.DumpRequest)
+
+	gock.New(apiAddr).
+		Post("/api/v2/auth/login").
+		Reply(200).
+		SetHeader("Set-Cookie", "SID=1")
+
+	setUpSyncEndpoint(apiAddr)
+
+	// 1
+	setUpMocks(apiAddr, "cf7da7ab4d4e6125567bd979994f13bb1f23dddd", "1")
+
+	// 2
+	setUpMocks(apiAddr, "842783e3005495d5d1637f5364b59343c7844707", "2")
+
+	// 3
+	setUpMocks(apiAddr, "7a1448be6d15bcde08ee9915350d0725775b73a3", "3")
+
+	client := &http.Client{Transport: &http.Transport{}}
+	gock.InterceptClient(client)
+
+	qBTConn.Init(apiAddr, client, true)
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+	defer server.CloseClientConnections()
+	serverAddr := server.Listener.Addr().(*net.TCPAddr)
+
+	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
+		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
+	Check(err)
+
+	torrents, err := transmissionbt.TorrentGetAll()
+	Check(err)
+	if len(torrents) != 2 {
+		t.Error("Number of torrents is not equal to 2")
+	}
+
+	time.Sleep((60 + 10) * time.Second)
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/resume").
+		MatchType("url").
+		BodyString("^hashes=$").
+		Reply(200)
+	err = transmissionbt.TorrentStartRecentlyActive()
+	Check(err)
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/resume").
+		MatchType("url").
+		BodyString("^hashes=7a1448be6d15bcde08ee9915350d0725775b73a3$").
+		Reply(200)
+	err = transmissionbt.TorrentStartRecentlyActive()
+	Check(err)
 }
 
 func TestTorrentAdd(t *testing.T) {
