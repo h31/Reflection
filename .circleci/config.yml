@@ -5,6 +5,8 @@ jobs: # basic units of work in a run
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
 
+    working_directory: /go/src/github.com/h31/Reflection
+
     parallelism: 2
 
     environment: # environment variables for the build itself
@@ -17,6 +19,8 @@ jobs: # basic units of work in a run
       - restore_cache: # restores saved cache if no changes are detected since last run
           keys:
             - go-mod-v4-{{ checksum "go.sum" }}
+
+      - run: go get ./...
 
       - run:
           name: Run unit tests
