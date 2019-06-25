@@ -110,12 +110,16 @@ func (list *TorrentsList) Slice() TorrentInfoList {
 func (list *TorrentsList) GetActive() (resp TorrentInfoList) {
 	const timeout = 60 * time.Second
 
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+
 	for _, item := range list.items {
 		activity := list.activity[item.Hash]
 		if activity != nil && time.Since(*activity) < timeout {
 			resp = append(resp, item)
 		}
 	}
+	sort.Sort(resp)
 	return
 }
 

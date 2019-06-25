@@ -86,6 +86,8 @@ func IsFieldDeprecated(field string) bool {
 //}
 
 func parseIDsField(args *json.RawMessage) qBT.TorrentInfoList {
+	qBTConn.UpdateTorrentsList()
+
 	if args == nil {
 		log.Debug("No IDs provided")
 		return qBTConn.TorrentsList.Slice()
@@ -466,8 +468,6 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 	var req transmission.GetRequest
 	err := json.Unmarshal(args, &req)
 	Check(err)
-
-	qBTConn.UpdateTorrentsList()
 
 	torrents := parseIDsField(req.Ids)
 	severalIDsRequired := len(torrents) > 1

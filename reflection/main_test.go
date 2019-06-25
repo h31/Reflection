@@ -52,8 +52,11 @@ func TestTorrentListing(t *testing.T) {
 
 	defer gock.Off()
 
+	gock.Observe(gock.DumpRequest)
+
 	gock.New(apiAddr).
 		Get("/api/v2/torrents/info").
+		Times(2).
 		Reply(200).
 		File("testdata/torrent_list.json")
 
@@ -91,6 +94,14 @@ func TestTorrentListing(t *testing.T) {
 	if *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
 		t.Error("Unexpected torrent 1")
 	}
+
+	id := *torrents[1].ID
+
+	singleTorrent, err := transmissionbt.TorrentGetAllFor([]int64{id})
+	Check(err)
+	if *singleTorrent[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
+		t.Error("Unexpected torrent")
+	}
 }
 
 func TestTorrentListingRepeated(t *testing.T) {
@@ -108,45 +119,14 @@ func TestSyncing(t *testing.T) {
 
 	defer gock.Off()
 
+	gock.Observe(gock.DumpRequest)
+
 	gock.New(apiAddr).
 		Post("/api/v2/auth/login").
 		Reply(200).
 		SetHeader("Set-Cookie", "SID=1")
 
-	gock.New(apiAddr).
-		Get("/api/v2/sync/maindata").
-		MatchParam("rid", "0").
-		HeaderPresent("Cookie").
-		Reply(200).
-		File("testdata/sync_initial.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/sync/maindata").
-		MatchParam("rid", "1").
-		HeaderPresent("Cookie").
-		Reply(200).
-		File("testdata/sync_1.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/sync/maindata").
-		MatchParam("rid", "2").
-		HeaderPresent("Cookie").
-		Reply(200).
-		File("testdata/sync_2.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/sync/maindata").
-		MatchParam("rid", "3").
-		HeaderPresent("Cookie").
-		Reply(200).
-		File("testdata/sync_3.json")
-
-	gock.New(apiAddr).
-		Get("/api/v2/sync/maindata").
-		MatchParam("rid", "4").
-		HeaderPresent("Cookie").
-		Reply(200).
-		File("testdata/sync_4.json")
+	setUpSyncEndpoint(apiAddr)
 
 	// 1
 	setUpMocks(apiAddr, "cf7da7ab4d4e6125567bd979994f13bb1f23dddd", "1")
@@ -207,6 +187,152 @@ func TestSyncing(t *testing.T) {
 	if len(torrents) != 2 {
 		t.Error("Number of torrents is not equal to 2")
 	}
+
+	id := *torrents[1].ID
+
+	singleTorrent, err := transmissionbt.TorrentGetAllFor([]int64{id})
+	Check(err)
+	if *singleTorrent[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
+		t.Error("Unexpected torrent")
+	}
+}
+
+func TestSyncingRecentlyActive(t *testing.T) {
+	const apiAddr = "http://localhost:8080"
+	log.SetLevel(currentLogLevel)
+
+	defer gock.Off()
+
+	gock.Observe(gock.DumpRequest)
+
+	gock.New(apiAddr).
+		Post("/api/v2/auth/login").
+		Reply(200).
+		SetHeader("Set-Cookie", "SID=1")
+
+	setUpSyncEndpoint(apiAddr)
+
+	// 1
+	setUpMocks(apiAddr, "cf7da7ab4d4e6125567bd979994f13bb1f23dddd", "1")
+
+	// 2
+	setUpMocks(apiAddr, "842783e3005495d5d1637f5364b59343c7844707", "2")
+
+	// 3
+	setUpMocks(apiAddr, "7a1448be6d15bcde08ee9915350d0725775b73a3", "3")
+
+	client := &http.Client{Transport: &http.Transport{}}
+	gock.InterceptClient(client)
+
+	qBTConn.Init(apiAddr, client, true)
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+	defer server.CloseClientConnections()
+	serverAddr := server.Listener.Addr().(*net.TCPAddr)
+
+	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
+		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
+	Check(err)
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/resume").
+		MatchType("url").
+		BodyString("^hashes=842783e3005495d5d1637f5364b59343c7844707%7Ccf7da7ab4d4e6125567bd979994f13bb1f23dddd$").
+		Times(2).
+		Reply(200)
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/resume").
+		MatchType("url").
+		BodyString("^hashes=842783e3005495d5d1637f5364b59343c7844707%7Ccf7da7ab4d4e6125567bd979994f13bb1f23dddd%7C7a1448be6d15bcde08ee9915350d0725775b73a3$").
+		Times(5).
+		Reply(200)
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/resume").
+		MatchType("url").
+		BodyString("^hashes=842783e3005495d5d1637f5364b59343c7844707%7Ccf7da7ab4d4e6125567bd979994f13bb1f23dddd$").
+		Times(1).
+		Reply(200)
+
+	for i := 0; i < 5; i++ {
+		err = transmissionbt.TorrentStartRecentlyActive()
+		Check(err)
+	}
+
+	//if len(torrents) != 2 {
+	//	t.Error("Number of torrents is not equal to 2")
+	//}
+	//if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
+	//	t.Error("Unexpected torrent 0")
+	//}
+	//if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
+	//	t.Error("Unexpected torrent 1")
+	//}
+	//
+	//torrents, err = transmissionbt.TorrentGetAll()
+	//Check(err)
+	//if len(torrents) != 2 {
+	//	t.Error("Number of torrents is not equal to 2")
+	//}
+	//
+	//torrents, err = transmissionbt.TorrentGetAll()
+	//Check(err)
+	//if len(torrents) != 3 {
+	//	t.Error("Number of torrents is not equal to 3")
+	//}
+	//if *torrents[2].Name != "xubuntu-18.04.2-desktop-amd64.iso" {
+	//	t.Error("Unexpected torrent name")
+	//}
+	//
+	//torrents, err = transmissionbt.TorrentGetAll()
+	//Check(err)
+	//if len(torrents) != 3 {
+	//	t.Error("Number of torrents is not equal to 3")
+	//}
+	//
+	//torrents, err = transmissionbt.TorrentGetAll()
+	//Check(err)
+	//if len(torrents) != 2 {
+	//	t.Error("Number of torrents is not equal to 2")
+	//}
+}
+
+func setUpSyncEndpoint(apiAddr string) {
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "0").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_initial.json")
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "1").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_1.json")
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "2").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_2.json")
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "3").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_3.json")
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "4").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_4.json")
+	gock.New(apiAddr).
+		Get("/api/v2/sync/maindata").
+		MatchParam("rid", "5").
+		HeaderPresent("Cookie").
+		Reply(200).
+		File("testdata/sync_5.json")
 }
 
 func TestSyncingRepeated(t *testing.T) {
