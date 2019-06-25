@@ -260,7 +260,7 @@ func TestSyncingRecentlyActive(t *testing.T) {
 	}
 }
 
-func TestSyncingRecentlyActiveLong(t *testing.T) {
+func testSyncingRecentlyActiveLong(t *testing.T) {
 	const apiAddr = "http://localhost:8080"
 	log.SetLevel(currentLogLevel)
 

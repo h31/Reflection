@@ -20,7 +20,7 @@ jobs: # basic units of work in a run
           keys:
             - go-mod-v4-{{ checksum "go.sum" }}
 
-      - run: go get -t github.com/h31/Reflection/reflection
+      - run: go get -v -t github.com/h31/Reflection/reflection
 
       - run:
           name: Run unit tests

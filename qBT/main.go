@@ -155,6 +155,7 @@ func (q *Connection) Init(baseUrl string, client *http.Client, useSync bool) {
 	q.TorrentsList.hashIds = make(map[ID]Hash)
 	q.TorrentsList.useSync = useSync
 	q.TorrentsList.rid = 0
+	q.auth.LoggedIn = false
 
 	apiAddr, _ := url.Parse("api/v2/")
 	parsedBaseAddr, _ := url.Parse(baseUrl)
