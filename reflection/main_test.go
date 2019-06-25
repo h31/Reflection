@@ -257,43 +257,148 @@ func TestSyncingRecentlyActive(t *testing.T) {
 		err = transmissionbt.TorrentStartRecentlyActive()
 		Check(err)
 	}
+}
 
-	//if len(torrents) != 2 {
-	//	t.Error("Number of torrents is not equal to 2")
-	//}
-	//if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
-	//	t.Error("Unexpected torrent 0")
-	//}
-	//if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
-	//	t.Error("Unexpected torrent 1")
-	//}
+func TestTorrentAdd(t *testing.T) {
+	const apiAddr = "http://localhost:8080"
+	log.SetLevel(currentLogLevel)
+
+	defer gock.Off()
+
+	gock.Observe(gock.DumpRequest)
+
+	gock.New(apiAddr).
+		Post("/api/v2/auth/login").
+		Reply(200).
+		SetHeader("Set-Cookie", "SID=1")
+
+	setUpSyncEndpoint(apiAddr)
+
+	// 1
+	setUpMocks(apiAddr, "cf7da7ab4d4e6125567bd979994f13bb1f23dddd", "1")
+
+	// 2
+	setUpMocks(apiAddr, "842783e3005495d5d1637f5364b59343c7844707", "2")
+
+	// 3
+	setUpMocks(apiAddr, "7a1448be6d15bcde08ee9915350d0725775b73a3", "3")
+
+	client := &http.Client{Transport: &http.Transport{}}
+	gock.InterceptClient(client)
+
+	qBTConn.Init(apiAddr, client, true)
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+	defer server.CloseClientConnections()
+	serverAddr := server.Listener.Addr().(*net.TCPAddr)
+
+	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
+		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
+	Check(err)
+
+	//urlMatcher := func(req *http.Request, ereq *gock.Request) (bool, error) {
+	//	err := req.ParseMultipartForm(1 << 20) // 1 MB
+	//	Check(err)
 	//
-	//torrents, err = transmissionbt.TorrentGetAll()
-	//Check(err)
-	//if len(torrents) != 2 {
-	//	t.Error("Number of torrents is not equal to 2")
-	//}
+	//	_, exists := req.MultipartForm.Value["urls"]
 	//
-	//torrents, err = transmissionbt.TorrentGetAll()
-	//Check(err)
-	//if len(torrents) != 3 {
-	//	t.Error("Number of torrents is not equal to 3")
+	//	if !exists {
+	//		return false, errors.New("No URL value")
+	//	}
+	//	return true, nil
 	//}
-	//if *torrents[2].Name != "xubuntu-18.04.2-desktop-amd64.iso" {
-	//	t.Error("Unexpected torrent name")
-	//}
-	//
-	//torrents, err = transmissionbt.TorrentGetAll()
-	//Check(err)
-	//if len(torrents) != 3 {
-	//	t.Error("Number of torrents is not equal to 3")
-	//}
-	//
-	//torrents, err = transmissionbt.TorrentGetAll()
-	//Check(err)
-	//if len(torrents) != 2 {
-	//	t.Error("Number of torrents is not equal to 2")
-	//}
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/add").
+		MatchType("form").
+		BodyString("Content-Disposition: form-data; name=\"urls\"").
+		Reply(200)
+
+	magnet := "magnet:?xt=urn:btih:7a1448be6d15bcde08ee9915350d0725775b73a3&dn=xubuntu-18.04.2-desktop-amd64.iso&tr=http%3a%2f%2ftorrent.ubuntu.com%3a6969%2fannounce"
+
+	torrent, err := transmissionbt.TorrentAdd(&transmissionrpc.TorrentAddPayload{Filename: &magnet})
+	Check(err)
+
+	if *torrent.Name != "xubuntu-18.04.2-desktop-amd64.iso" {
+		t.Error("Unexpected torrent")
+	}
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/add").
+		MatchType("form").
+		BodyString("Content-Disposition: form-data; name=\"sequentialDownload\"").
+		Reply(200)
+
+	location := "/home/user/+sf"
+
+	torrent, err = transmissionbt.TorrentAdd(&transmissionrpc.TorrentAddPayload{Filename: &magnet, DownloadDir: &location})
+	Check(err)
+
+	if *torrent.Name != "xubuntu-18.04.2-desktop-amd64.iso" {
+		t.Error("Unexpected torrent")
+	}
+}
+
+func TestTorrentMove(t *testing.T) {
+	const apiAddr = "http://localhost:8080"
+	log.SetLevel(currentLogLevel)
+
+	defer gock.Off()
+	gock.Flush()
+	gock.CleanUnmatchedRequest()
+
+	gock.Observe(gock.DumpRequest)
+
+	gock.New(apiAddr).
+		Post("/api/v2/auth/login").
+		Reply(200).
+		SetHeader("Set-Cookie", "SID=1")
+
+	gock.New(apiAddr).
+		Get("/api/v2/torrents/info").
+		Reply(200).
+		File("testdata/torrent_list.json")
+
+	client := &http.Client{Transport: &http.Transport{}}
+	gock.InterceptClient(client)
+
+	qBTConn.Init(apiAddr, client, false)
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+	defer server.CloseClientConnections()
+	serverAddr := server.Listener.Addr().(*net.TCPAddr)
+
+	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
+		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
+	Check(err)
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/toggleFirstLastPiecePrio").
+		MatchType("url").
+		BodyString("hashes=842783e3005495d5d1637f5364b59343c7844707").
+		Reply(200)
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/toggleSequentialDownload").
+		MatchType("url").
+		BodyString("hashes=842783e3005495d5d1637f5364b59343c7844707").
+		Reply(200)
+
+	gock.New(apiAddr).
+		Post("/api/v2/torrents/setLocation").
+		MatchType("url").
+		BodyString("hashes=842783e3005495d5d1637f5364b59343c7844707&location=%2Fnew%2Fdir").
+		Reply(200)
+
+	err = transmissionbt.TorrentSetLocationHash("842783e3005495d5d1637f5364b59343c7844707", "/new/dir+sf", true)
+	Check(err)
+
+	p := gock.Pending()
+	println(p)
+
+	if gock.IsPending() {
+		t.Fail()
+	}
 }
 
 func setUpSyncEndpoint(apiAddr string) {

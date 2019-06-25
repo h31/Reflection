@@ -750,7 +750,7 @@ func parseDeleteFilesField(deleteLocalData interface{}) bool {
 }
 
 func PutMIMEField(mime *multipart.Writer, fieldName string, value string) {
-	urlsWriter, err := mime.CreateFormField("urls")
+	urlsWriter, err := mime.CreateFormField(fieldName)
 	Check(err)
 	_, err = urlsWriter.Write([]byte(value))
 	Check(err)
