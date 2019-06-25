@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+var currentLogLevel = log.DebugLevel
+
 func TestAdditionalLocationArguments(t *testing.T) {
 	tables := []struct {
 		input            string
@@ -46,7 +48,7 @@ func TestAdditionalLocationArguments(t *testing.T) {
 
 func TestTorrentListing(t *testing.T) {
 	const apiAddr = "http://localhost:8080"
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(currentLogLevel)
 
 	defer gock.Off()
 
@@ -74,7 +76,6 @@ func TestTorrentListing(t *testing.T) {
 	defer server.Close()
 	defer server.CloseClientConnections()
 	serverAddr := server.Listener.Addr().(*net.TCPAddr)
-	println(serverAddr.IP.String())
 
 	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
 		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
@@ -84,17 +85,26 @@ func TestTorrentListing(t *testing.T) {
 	if len(torrents) != 2 {
 		t.Error("Number of torrents is not equal to 2")
 	}
-	if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" && *torrents[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
+	if *torrents[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
 		t.Error("Unexpected torrent 0")
 	}
-	if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" && *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
+	if *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
 		t.Error("Unexpected torrent 1")
 	}
 }
 
+func TestTorrentListingRepeated(t *testing.T) {
+	prevLogLevel := currentLogLevel
+	currentLogLevel = log.ErrorLevel
+	for i := 0; i < 50; i++ {
+		TestTorrentListing(t)
+	}
+	currentLogLevel = prevLogLevel
+}
+
 func TestSyncing(t *testing.T) {
 	const apiAddr = "http://localhost:8080"
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(currentLogLevel)
 
 	defer gock.Off()
 
@@ -155,7 +165,6 @@ func TestSyncing(t *testing.T) {
 	defer server.Close()
 	defer server.CloseClientConnections()
 	serverAddr := server.Listener.Addr().(*net.TCPAddr)
-	println(serverAddr.IP.String())
 
 	transmissionbt, err := transmissionrpc.New(serverAddr.IP.String(), "", "",
 		&transmissionrpc.AdvancedConfig{Port: uint16(serverAddr.Port)})
@@ -165,10 +174,10 @@ func TestSyncing(t *testing.T) {
 	if len(torrents) != 2 {
 		t.Error("Number of torrents is not equal to 2")
 	}
-	if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" && *torrents[0].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
+	if *torrents[0].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
 		t.Error("Unexpected torrent 0")
 	}
-	if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" && *torrents[1].Name != "ubuntu-18.04.2-live-server-amd64.iso" {
+	if *torrents[1].Name != "ubuntu-18.04.2-desktop-amd64.iso" {
 		t.Error("Unexpected torrent 1")
 	}
 
@@ -198,6 +207,15 @@ func TestSyncing(t *testing.T) {
 	if len(torrents) != 2 {
 		t.Error("Number of torrents is not equal to 2")
 	}
+}
+
+func TestSyncingRepeated(t *testing.T) {
+	prevLogLevel := currentLogLevel
+	currentLogLevel = log.ErrorLevel
+	for i := 0; i < 50; i++ {
+		TestSyncing(t)
+	}
+	currentLogLevel = prevLogLevel
 }
 
 func setUpMocks(apiAddr string, hash string, name string) {

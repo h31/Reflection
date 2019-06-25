@@ -85,7 +85,7 @@ func IsFieldDeprecated(field string) bool {
 //	return filtered
 //}
 
-func parseIDsField(args *json.RawMessage) []*qBT.TorrentInfo {
+func parseIDsField(args *json.RawMessage) qBT.TorrentInfoList {
 	if args == nil {
 		log.Debug("No IDs provided")
 		return qBTConn.TorrentsList.Slice()
@@ -131,7 +131,7 @@ func parseIDsField(args *json.RawMessage) []*qBT.TorrentInfo {
 	}
 }
 
-func parseActionArgument(args json.RawMessage) []*qBT.TorrentInfo {
+func parseActionArgument(args json.RawMessage) qBT.TorrentInfoList {
 	var req struct {
 		Ids json.RawMessage
 	}
@@ -687,14 +687,14 @@ func SessionStats() (JsonMap, string) {
 
 func TorrentPause(args json.RawMessage) (JsonMap, string) {
 	torrents := parseActionArgument(args)
-	log.WithField("hashes", qBT.TorrentInfoListHashes(torrents)).Debug("Stopping torrents")
+	log.WithField("hashes", torrents.Hashes()).Debug("Stopping torrents")
 	qBTConn.PostWithHashes("torrents/pause", torrents)
 	return JsonMap{}, "success"
 }
 
 func TorrentResume(args json.RawMessage) (JsonMap, string) {
 	torrents := parseActionArgument(args)
-	log.WithField("hashes", qBT.TorrentInfoListHashes(torrents)).Debug("Starting torrents")
+	log.WithField("hashes", torrents.Hashes()).Debug("Starting torrents")
 
 	qBTConn.PostWithHashes("torrents/resume", torrents)
 	return JsonMap{}, "success"
@@ -702,7 +702,7 @@ func TorrentResume(args json.RawMessage) (JsonMap, string) {
 
 func TorrentRecheck(args json.RawMessage) (JsonMap, string) {
 	torrents := parseActionArgument(args)
-	log.WithField("hashes", qBT.TorrentInfoListHashes(torrents)).Debug("Verifying torrents")
+	log.WithField("hashes", torrents.Hashes()).Debug("Verifying torrents")
 
 	qBTConn.PostWithHashes("torrents/recheck", torrents)
 	return JsonMap{}, "success"
@@ -717,9 +717,9 @@ func TorrentDelete(args json.RawMessage) (JsonMap, string) {
 	Check(err)
 
 	torrents := parseIDsField(&req.Ids)
-	log.WithField("hashes", qBT.TorrentInfoListHashes(torrents)).Warn("Going to remove torrents")
+	log.WithField("hashes", torrents.Hashes()).Warn("Going to remove torrents")
 
-	joinedHashes := qBT.ConcatenateHashes(torrents)
+	joinedHashes := torrents.ConcatenateHashes()
 
 	deleteFiles := parseDeleteFilesField(req.DeleteLocalData)
 
@@ -1066,7 +1066,7 @@ func TorrentSetLocation(args json.RawMessage) (JsonMap, string) {
 	}
 
 	params := url.Values{
-		"hashes":   {qBT.ConcatenateHashes(torrents)},
+		"hashes":   {torrents.ConcatenateHashes()},
 		"location": {strippedLocation},
 	}
 	qBTConn.PostForm(qBTConn.MakeRequestURL("torrents/setLocation"), params)

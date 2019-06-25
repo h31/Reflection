@@ -1,6 +1,8 @@
 package qBT
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 // https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-Documentation
 
@@ -111,7 +113,7 @@ type TransferInfo struct {
 type MainData struct {
 	Rid                int
 	Full_update        bool
-	Torrents           map[Hash]json.RawMessage
+	Torrents           *json.RawMessage
 	Torrents_removed   []Hash
 	Categories         *json.RawMessage
 	Categories_removed *json.RawMessage

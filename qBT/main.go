@@ -2,11 +2,13 @@ package qBT
 
 import (
 	"encoding/json"
+	"github.com/iancoleman/orderedmap"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,8 +42,7 @@ type Hash string
 type ID int
 
 const (
-	INVALID_ID         ID = -2
-	RECENTLY_ACTIVE_ID ID = -1
+	INVALID_ID ID = -1
 )
 
 type Connection struct {
@@ -61,30 +62,52 @@ type TorrentsList struct {
 	mutex     sync.RWMutex
 }
 
+type TorrentInfoList []*TorrentInfo
+
+func (torrents TorrentInfoList) Len() int {
+	return len(torrents)
+}
+func (torrents TorrentInfoList) Swap(i, j int) {
+	torrents[i], torrents[j] = torrents[j], torrents[i]
+}
+
+func (torrents TorrentInfoList) Less(i, j int) bool {
+	return torrents[i].Id < torrents[j].Id
+}
+
+func (torrents TorrentInfoList) ConcatenateHashes() string {
+	hashesStrings := make([]string, len(torrents))
+	for i, torrent := range torrents {
+		hashesStrings[i] = string(torrent.Hash)
+	}
+	return strings.Join(hashesStrings, "|")
+}
+
+func (torrents TorrentInfoList) Hashes() []Hash {
+	hashesStrings := make([]Hash, len(torrents))
+	for i, torrent := range torrents {
+		hashesStrings[i] = torrent.Hash
+	}
+	return hashesStrings
+}
+
 func (list *TorrentsList) AllItems() map[Hash]*TorrentInfo {
 	return list.items
 }
 
-func (list *TorrentsList) Slice() []*TorrentInfo {
+func (list *TorrentsList) Slice() TorrentInfoList {
 	list.mutex.RLock()
 	defer list.mutex.RUnlock()
 
-	result := make([]*TorrentInfo, 0, len(list.items))
+	result := make(TorrentInfoList, 0, len(list.items))
 	for _, item := range list.items {
 		result = append(result, item)
 	}
+	sort.Sort(result)
 	return result
 }
 
-func (list *TorrentsList) AllIDs() []ID {
-	result := make([]ID, list.ItemsNum())
-	for i := 0; i < list.ItemsNum(); i++ {
-		result[i] = ID(i + 1)
-	}
-	return result
-}
-
-func (list *TorrentsList) GetActive() (resp []*TorrentInfo) {
+func (list *TorrentsList) GetActive() (resp TorrentInfoList) {
 	const timeout = 60 * time.Second
 
 	for _, item := range list.items {
@@ -122,19 +145,12 @@ func (list *TorrentsList) ItemsNum() int {
 	return len(list.hashIds)
 }
 
-func TorrentInfoListHashes(torrents []*TorrentInfo) []Hash {
-	hashesStrings := make([]Hash, len(torrents))
-	for i, torrent := range torrents {
-		hashesStrings[i] = torrent.Hash
-	}
-	return hashesStrings
-}
-
 func (q *Connection) Init(baseUrl string, client *http.Client, useSync bool) {
 	q.TorrentsList.items = make(map[Hash]*TorrentInfo, 0)
 	q.TorrentsList.activity = make(map[Hash]*time.Time)
 	q.TorrentsList.hashIds = make(map[ID]Hash)
 	q.TorrentsList.useSync = useSync
+	q.TorrentsList.rid = 0
 
 	apiAddr, _ := url.Parse("api/v2/")
 	parsedBaseAddr, _ := url.Parse(baseUrl)
@@ -168,8 +184,8 @@ func (q *Connection) MakeRequestURL(path string) string {
 	return q.MakeRequestURLWithParam(path, map[string]string{})
 }
 
-func (q *Connection) UpdateTorrentListDirectly() {
-	torrents := make([]*TorrentInfo, 0)
+func (q *Connection) UpdateTorrentListDirectly() TorrentInfoList {
+	torrents := make(TorrentInfoList, 0)
 
 	params := map[string]string{}
 	url := q.MakeRequestURLWithParam("torrents/info", params)
@@ -183,9 +199,10 @@ func (q *Connection) UpdateTorrentListDirectly() {
 		q.TorrentsList.items[torrent.Hash] = torrent
 		torrent.Id = INVALID_ID
 	}
+	return torrents
 }
 
-func (q *Connection) UpdateCachedTorrentsList() (added, deleted []*TorrentInfo) {
+func (q *Connection) UpdateCachedTorrentsList() (added, deleted TorrentInfoList) {
 	torrentsList := &q.TorrentsList
 	url := q.MakeRequestURLWithParam("sync/maindata", map[string]string{"rid": strconv.Itoa(torrentsList.rid)})
 	mainData := q.DoGET(url)
@@ -194,24 +211,40 @@ func (q *Connection) UpdateCachedTorrentsList() (added, deleted []*TorrentInfo) 
 
 	err := json.Unmarshal(mainData, &mainDataCache)
 	checkAndLog(err, mainData)
+
 	torrentsList.rid = mainDataCache.Rid
 	now := time.Now()
 	for _, deletedHash := range mainDataCache.Torrents_removed {
 		deleted = append(deleted, torrentsList.items[deletedHash])
 		delete(torrentsList.items, deletedHash)
 	}
-	for hash, rawTorrentData := range mainDataCache.Torrents {
-		torrent, exists := torrentsList.items[hash]
-		if !exists {
-			torrent = &TorrentInfo{Id: INVALID_ID}
-			torrentsList.items[hash] = torrent
-			added = append(added, torrent)
+
+	if mainDataCache.Torrents != nil {
+		orderedTorrentsMap := orderedmap.New()
+
+		err = json.Unmarshal(*mainDataCache.Torrents, &orderedTorrentsMap)
+		checkAndLog(err, *mainDataCache.Torrents)
+
+		nativeTorrentsMap := make(map[Hash]*json.RawMessage)
+
+		err = json.Unmarshal(*mainDataCache.Torrents, &nativeTorrentsMap)
+		checkAndLog(err, *mainDataCache.Torrents)
+
+		for _, hashString := range orderedTorrentsMap.Keys() {
+			hash := Hash(hashString)
+			torrent, exists := torrentsList.items[hash]
+			if !exists {
+				torrent = &TorrentInfo{Id: INVALID_ID}
+				torrentsList.items[hash] = torrent
+				added = append(added, torrent)
+			}
+			err := json.Unmarshal(*nativeTorrentsMap[hash], torrent)
+			checkAndLog(err, mainData)
+			torrent.Hash = hash
+			torrentsList.activity[hash] = &now
 		}
-		err := json.Unmarshal(rawTorrentData, torrent)
-		checkAndLog(err, mainData)
-		torrent.Hash = hash
-		torrentsList.activity[hash] = &now
 	}
+
 	return
 }
 
@@ -221,10 +254,12 @@ func (q *Connection) UpdateTorrentsList() {
 
 	if q.TorrentsList.useSync {
 		added, deleted := q.UpdateCachedTorrentsList()
-		q.TorrentsList.UpdateIDsSynced(added, deleted)
+		q.TorrentsList.DeleteIDsSync(deleted)
+		q.TorrentsList.UpdateIDs(added)
 	} else {
-		q.UpdateTorrentListDirectly()
-		q.TorrentsList.UpdateIDsFullRescan()
+		added := q.UpdateTorrentListDirectly()
+		q.TorrentsList.DeleteIDsFullRescan()
+		q.TorrentsList.UpdateIDs(added)
 	}
 }
 
@@ -340,8 +375,8 @@ func (q *Connection) Login(username, password string) bool {
 	return q.auth.LoggedIn
 }
 
-func (q *Connection) PostWithHashes(path string, torrents []*TorrentInfo) {
-	hashes := ConcatenateHashes(torrents)
+func (q *Connection) PostWithHashes(path string, torrents TorrentInfoList) {
+	hashes := torrents.ConcatenateHashes()
 	q.PostForm(q.MakeRequestURL(path), url.Values{"hashes": {hashes}})
 }
 
@@ -362,17 +397,16 @@ func (q *Connection) SetFirstLastPieceFirst(hash Hash, newState bool) {
 	q.SetToggleFlag("torrents/toggleFirstLastPiecePrio", hash, newState)
 }
 
-func ConcatenateHashes(torrents []*TorrentInfo) string {
-	hashesStrings := make([]string, len(torrents))
-	for i, torrent := range torrents {
-		hashesStrings[i] = string(torrent.Hash)
+func (list *TorrentsList) DeleteIDsSync(deleted TorrentInfoList) {
+	for _, torrent := range deleted {
+		if _, exists := list.hashIds[torrent.Id]; exists {
+			log.WithField("hash", torrent.Hash).WithField("id", torrent.Id).Info("Hash was removed from the torrent list")
+			delete(list.hashIds, torrent.Id)
+		}
 	}
-	return strings.Join(hashesStrings, "|")
 }
 
-func (list *TorrentsList) UpdateIDsFullRescan() {
-	addedCount := 0
-
+func (list *TorrentsList) DeleteIDsFullRescan() {
 	for id, hash := range list.hashIds {
 		if torrent, exists := list.items[hash]; exists {
 			torrent.Id = id
@@ -381,42 +415,15 @@ func (list *TorrentsList) UpdateIDsFullRescan() {
 			delete(list.hashIds, id)
 		}
 	}
-
-	for hash, torrent := range list.items {
-		if torrent.Id == INVALID_ID {
-			list.hashIds[list.lastIndex] = hash
-			torrent.Id = list.lastIndex
-			list.lastIndex++
-			addedCount++
-		}
-	}
-
-	if addedCount > 0 {
-		log.WithField("num", addedCount).Info("Added new hashes to IDs table")
-	}
 }
 
-func (list *TorrentsList) UpdateIDsSynced(added, deleted []*TorrentInfo) {
-	addedCount := 0
-
-	for _, torrent := range deleted {
-		if _, exists := list.hashIds[torrent.Id]; exists {
-			log.WithField("hash", torrent.Hash).WithField("id", torrent.Id).Info("Hash was removed from the torrent list")
-			delete(list.hashIds, torrent.Id)
-		}
-	}
-
+func (list *TorrentsList) UpdateIDs(added TorrentInfoList) {
 	for _, torrent := range added {
 		if torrent.Id == INVALID_ID {
-			log.WithField("hash", torrent.Hash).WithField("id", list.lastIndex).Info("Torrent got assigned ID")
 			list.hashIds[list.lastIndex] = torrent.Hash
 			torrent.Id = list.lastIndex
+			log.WithField("hash", torrent.Hash).WithField("id", list.lastIndex).Info("Torrent got assigned ID")
 			list.lastIndex++
-			addedCount++
 		}
-	}
-
-	if addedCount > 0 {
-		log.WithField("num", addedCount).Info("Added new hashes to IDs table")
 	}
 }
