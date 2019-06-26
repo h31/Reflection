@@ -36,7 +36,15 @@ For example, if download directory is `/home/user/`, those paths can be used:
 * `/home/user/+h` to skip hash checking when adding torrent.
 
 It is possible to combine several commands, i.e. `/home/user/+sf`. Use `-` sign instead of `+` to disable an option.
- f your want to disable command processing and treat a path just as a path, end it with `/`, i.e. `/home/user/my+path+s/`.
+If your want to disable command processing and treat a path just as a path, end it with `/`, i.e. `/home/user/my+path+s/`.
+
+Reflection applies some optimizations to make things smoother:
+* Both qBittorent and Transmission have an ability to transmit not the whole torrents list but just the recently changed information.
+They do it in a slightly different way, but Reflection tries to compensate differences.
+Use `-sync=false` command line flag to disable this optimization and make Reflection request the whole torrents list each time.
+* Due to the way the qBittorrent's API was designed, some requests can be quite slow.
+Reflection caches those requests, so things work noticeably faster. Most of the time you won't notice an existence of the cache.
+By default, the cache timeout is set to 15 seconds. Use `-cache-timeout seconds` to tune the timeout. If set to 0, the cache is disabled.
 
 ## Usage:
 
