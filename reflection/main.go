@@ -174,7 +174,7 @@ func MapTorrentList(dst JsonMap, src *qBT.TorrentInfo) {
 	dst["leftUntilDone"] = float64(src.Size) * (1 - src.Progress)
 	dst["desiredAvailable"] = float64(src.Size) * (1 - src.Progress) // TODO
 	dst["haveUnchecked"] = 0                                         // TODO
-	if src.State == "metaDL" || src.State == "pausedDL" {
+	if src.State == "metaDL" {
 		dst["metadataPercentComplete"] = 0
 	} else {
 		dst["metadataPercentComplete"] = 1
