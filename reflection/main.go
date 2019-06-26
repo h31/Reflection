@@ -11,6 +11,7 @@ import (
 	"github.com/Workiva/go-datastructures/bitarray"
 	"github.com/h31/Reflection/qBT"
 	"github.com/h31/Reflection/transmission"
+	"github.com/ricochet2200/go-disk-usage/du"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"math"
@@ -20,7 +21,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode"
 )
@@ -643,27 +643,20 @@ func SessionGet() (JsonMap, string) {
 }
 
 func FreeSpace(args json.RawMessage) (JsonMap, string) {
-	var req JsonMap
+	req := struct {
+		Path string
+	}{}
 	err := json.Unmarshal(args, &req)
 	Check(err)
 
-	var path string
-	switch v := req["path"].(type) {
-	case string:
-		path = v
-	}
-	size := uint64(100 * (1 << 30))
-	if path != "" {
-		var stat syscall.Statfs_t
-		syscall.Statfs(path, &stat)
-		size = stat.Bavail * uint64(stat.Bsize)
-	}
+	diskUsage := du.NewDiskUsage(req.Path)
+	freeSpace := diskUsage.Available()
 
-	log.Debug("Free space of ", path, ": ", size)
+	log.WithField("path", req.Path).WithField("free space", freeSpace).Debug("Free space")
 
 	return JsonMap{
-		"path":       path,
-		"size-bytes": size, // 100 GB
+		"path":       req.Path,
+		"size-bytes": freeSpace,
 	}, "success"
 }
 
