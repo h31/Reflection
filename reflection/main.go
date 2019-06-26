@@ -565,7 +565,23 @@ func TorrentGet(args json.RawMessage) (JsonMap, string) {
 		}
 		resultList[i] = translated
 	}
-	return JsonMap{"torrents": resultList}, "success"
+	response := JsonMap{"torrents": resultList}
+	addRemovedList(req.Ids, response)
+	return response, "success"
+}
+
+func addRemovedList(idsField *json.RawMessage, resp JsonMap) {
+	if idsField == nil {
+		return
+	}
+	var ids interface{}
+	err := json.Unmarshal(*idsField, &ids)
+	Check(err)
+
+	switch ids.(type) {
+	case string:
+		resp["removed"] = qBTConn.TorrentsList.GetRemoved()
+	}
 }
 
 func qBTEncryptionToTR(enc int) (res string) {

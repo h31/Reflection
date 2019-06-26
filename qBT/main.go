@@ -45,6 +45,8 @@ const (
 	INVALID_ID ID = -1
 )
 
+var RECENTLY_ACTIVE_TIMEOUT = 60 * time.Second
+
 type Connection struct {
 	addr         *url.URL
 	client       *http.Client
@@ -56,6 +58,7 @@ type TorrentsList struct {
 	useSync   bool
 	items     map[Hash]*TorrentInfo
 	activity  map[Hash]*time.Time
+	deleted   map[ID]*time.Time
 	rid       int
 	hashIds   map[ID]Hash
 	lastIndex ID
@@ -108,18 +111,30 @@ func (list *TorrentsList) Slice() TorrentInfoList {
 }
 
 func (list *TorrentsList) GetActive() (resp TorrentInfoList) {
-	const timeout = 60 * time.Second
-
 	list.mutex.RLock()
 	defer list.mutex.RUnlock()
 
 	for _, item := range list.items {
 		activity := list.activity[item.Hash]
-		if activity != nil && time.Since(*activity) < timeout {
+		if activity != nil && time.Since(*activity) < RECENTLY_ACTIVE_TIMEOUT {
 			resp = append(resp, item)
 		}
 	}
 	sort.Sort(resp)
+	return
+}
+
+func (list *TorrentsList) GetRemoved() (removed []ID) {
+	list.mutex.RLock()
+	defer list.mutex.RUnlock()
+
+	removed = make([]ID, 0, len(list.deleted))
+	for id, additionTime := range list.deleted {
+		if additionTime != nil && time.Since(*additionTime) < RECENTLY_ACTIVE_TIMEOUT {
+			removed = append(removed, id)
+		}
+	}
+	list.maintainListOfDeleted(nil)
 	return
 }
 
@@ -152,6 +167,7 @@ func (list *TorrentsList) ItemsNum() int {
 func (q *Connection) Init(baseUrl string, client *http.Client, useSync bool) {
 	q.TorrentsList.items = make(map[Hash]*TorrentInfo, 0)
 	q.TorrentsList.activity = make(map[Hash]*time.Time)
+	q.TorrentsList.deleted = make(map[ID]*time.Time)
 	q.TorrentsList.hashIds = make(map[ID]Hash)
 	q.TorrentsList.useSync = useSync
 	q.TorrentsList.rid = 0
@@ -407,6 +423,7 @@ func (list *TorrentsList) DeleteIDsSync(deleted TorrentInfoList) {
 		if _, exists := list.hashIds[torrent.Id]; exists {
 			log.WithField("hash", torrent.Hash).WithField("id", torrent.Id).Info("Hash was removed from the torrent list")
 			delete(list.hashIds, torrent.Id)
+			list.maintainListOfDeleted(torrent)
 		}
 	}
 }
@@ -418,7 +435,21 @@ func (list *TorrentsList) DeleteIDsFullRescan() {
 		} else {
 			log.WithField("hash", hash).WithField("id", id).Info("Hash disappeared from the torrent list")
 			delete(list.hashIds, id)
+			list.maintainListOfDeleted(torrent)
 		}
+	}
+}
+
+func (list *TorrentsList) maintainListOfDeleted(deletedTorrent *TorrentInfo) {
+	for id, additionTime := range list.deleted {
+		if additionTime != nil && time.Since(*additionTime) > RECENTLY_ACTIVE_TIMEOUT {
+			delete(list.deleted, id)
+		}
+	}
+
+	if deletedTorrent != nil {
+		now := time.Now()
+		list.deleted[deletedTorrent.Id] = &now
 	}
 }
 

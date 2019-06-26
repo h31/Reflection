@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/h31/Reflection/qBT"
 	"github.com/hekmon/transmissionrpc"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/h2non/gock.v1"
@@ -260,11 +261,14 @@ func TestSyncingRecentlyActive(t *testing.T) {
 	}
 }
 
-func testSyncingRecentlyActiveLong(t *testing.T) {
+func TestSyncingRecentlyActiveLong(t *testing.T) {
 	const apiAddr = "http://localhost:8080"
 	log.SetLevel(currentLogLevel)
 
 	defer gock.Off()
+
+	prevTime := qBT.RECENTLY_ACTIVE_TIMEOUT
+	qBT.RECENTLY_ACTIVE_TIMEOUT = 5 * time.Second
 
 	gock.Observe(gock.DumpRequest)
 
@@ -303,7 +307,7 @@ func testSyncingRecentlyActiveLong(t *testing.T) {
 		t.Error("Number of torrents is not equal to 2")
 	}
 
-	time.Sleep((60 + 10) * time.Second)
+	time.Sleep(qBT.RECENTLY_ACTIVE_TIMEOUT + 5*time.Second)
 
 	gock.New(apiAddr).
 		Post("/api/v2/torrents/resume").
@@ -320,6 +324,8 @@ func testSyncingRecentlyActiveLong(t *testing.T) {
 		Reply(200)
 	err = transmissionbt.TorrentStartRecentlyActive()
 	Check(err)
+
+	qBT.RECENTLY_ACTIVE_TIMEOUT = prevTime
 }
 
 func TestTorrentAdd(t *testing.T) {
