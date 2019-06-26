@@ -13,26 +13,30 @@ Currently Reflection is able to:
 * Show actual free space
 * Show peer table
 
-Compatibility:
-* Reflection emulates the latest version of Transmission (2.84)
-* Requires at least qBittorrent 4.1.0. Older versions of Reflection also support previous qBittorrent versions.
-* Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android, Transmission-Qt and Transmission Remote by Yury Polek. Please fill an issue if you experience an incompatibility with some client.
+## Compatibility
+* Reflection emulates the latest version of Transmission (2.94)
+* Requires at least qBittorrent 4.1.0.
+* Tested against Transmission Remote GUI, built-in Transmission Web UI, Torrnado client for Android, Transmission-Qt and Transmission Remote by Yury Polek. Please fill an issue if you experience an incompatibility with any client.
 
 What features are not supported yet:
-* Set torrent properties (download/upload speed, etc)
-* Show and change torrent client settings
+* Setting torrent properties (download/upload speed, etc)
+* Showing and changing torrent client settings
+
+## qBittorrent and Transmission-specific options
 
 Please note that both qBittorrent and Transmission have some unique features.
 For example, some torrent properties such as a private flag are not exposed by qBittorrent.
-In case Transmission clients request such information, Reflection responds with a predefined template data. Template values are stored in src/transmission/templates.go.
+In case Transmission clients request such information, Reflection responds with predefined template data. Template values are stored in [transmission/templates.go](https://github.com/h31/Reflection/blob/master/transmission/templates.go).
 
-Please set qBitorrent to English language for best experience! You can set this in qBittorrent.conf under Preferences section:
+To enable some qBittorrent-specific options, use a "Specify torrent location" command in your Transmission GUI
+and append a special flag to the path. You can also specify such paths when adding a new torrent.
+For example, if download directory is `/home/user/`, those paths can be used:
+* `/home/user/+s` to enable sequential download
+* `/home/user/+f` to download first and last pieces first 
+* `/home/user/+h` to skip hash checking when adding torrent.
 
-```
-[Preferences]
-...
-General\Locale=en_US
-```
+It is possible to combine several commands, i.e. `/home/user/+sf`. Use `-` sign instead of `+` to disable an option.
+ f your want to disable command processing and treat a path just as a path, end it with `/`, i.e. `/home/user/my+path+s/`.
 
 ## Usage:
 

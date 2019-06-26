@@ -638,7 +638,7 @@ func SessionGet() (JsonMap, string) {
 	session["download-dir"] = prefs.Save_path
 
 	version := qBTConn.GetVersion()
-	session["version"] = "2.84 (really qBT " + string(version) + ")"
+	session["version"] = "2.94 (really qBT " + string(version) + ")"
 	return session, "success"
 }
 
