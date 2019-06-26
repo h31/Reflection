@@ -14,14 +14,23 @@ Currently Reflection is able to:
 * Show peer table
 
 ## Installation
+### Linux
 ```
-# replace linux_amd64 with your architecture
+# replace amd64 with your architecture: amd64, i386, armv7, arm64
 curl -L https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_linux_amd64.gz | gunzip | sudo dd of=/usr/local/bin/reflection
 sudo chmod +x /usr/local/bin/reflection
 curl -L https://raw.githubusercontent.com/h31/Reflection/v1.0-rc1/reflection.service | sudo dd of=/etc/systemd/system/reflection.service
 sudo systemctl start reflection.service
 sudo systemctl enable reflection.service
 ```
+### MacOS
+Haven't been tested by myself, but should work.
+```
+curl -L https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_linux_amd64.gz | gunzip | sudo dd of=/usr/local/bin/reflection
+sudo chmod +x /usr/local/bin/reflection
+```
+### Windows
+Coming soon.
 
 ## Compatibility
 * Reflection emulates the latest version of Transmission (2.94)
