@@ -30,7 +30,9 @@ curl -L https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_
 sudo chmod +x /usr/local/bin/reflection
 ```
 ### Windows
-Coming soon.
+[64 bit .zip](https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_windows_64.zip)
+
+[32 bit .zip](https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_windows_32.zip)
 
 ## Compatibility
 * Reflection emulates the latest version of Transmission (2.94)
