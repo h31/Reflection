@@ -13,6 +13,16 @@ Currently Reflection is able to:
 * Show actual free space
 * Show peer table
 
+## Installation
+```
+# replace linux_amd64 with your architecture
+curl -L https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_linux_amd64.gz | gunzip | sudo dd of=/usr/local/bin/reflection
+sudo chmod +x /usr/local/bin/reflection
+curl -L https://raw.githubusercontent.com/h31/Reflection/v1.0-rc1/reflection.service | sudo dd of=/etc/systemd/system/reflection.service
+sudo systemctl start reflection.service
+sudo systemctl enable reflection.service
+```
+
 ## Compatibility
 * Reflection emulates the latest version of Transmission (2.94)
 * Requires at least qBittorrent 4.1.0.
