@@ -24,7 +24,7 @@ sudo systemctl start reflection.service
 sudo systemctl enable reflection.service
 ```
 ### MacOS
-Haven't been tested by myself, but should work.
+Untested
 ```
 curl -L https://github.com/h31/Reflection/releases/download/v1.0-rc1/reflection_macos_amd64.gz | gunzip | sudo dd of=/usr/local/bin/reflection
 sudo chmod +x /usr/local/bin/reflection
