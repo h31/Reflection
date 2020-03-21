@@ -754,7 +754,7 @@ func parseDeleteFilesField(deleteLocalData interface{}) bool {
 	case float64:
 		return val != 0
 	default:
-		panic("Unsupported field type")
+		return false // Default value
 	}
 }
 
