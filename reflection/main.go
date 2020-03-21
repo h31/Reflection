@@ -159,7 +159,11 @@ func MapTorrentList(dst JsonMap, src *qBT.TorrentInfo) {
 	dst["rateDownload"] = src.Dlspeed
 	dst["rateUpload"] = src.Upspeed
 	dst["uploadRatio"] = src.Ratio
-	dst["eta"] = src.Eta
+	if src.Eta >= 0 {
+		dst["eta"] = src.Eta
+	} else {
+		dst["eta"] = -1
+	}
 	dst["status"] = qBTStateToTransmissionStatus(src.State)
 	if dst["status"] == TR_STATUS_CHECK {
 		dst["recheckProgress"] = src.Progress
