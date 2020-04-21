@@ -896,6 +896,7 @@ func TorrentAdd(args json.RawMessage) (JsonMap, string) {
 		log.Debug("Upload torrent from metainfo")
 		metainfo, err := base64.StdEncoding.DecodeString(*req.Metainfo)
 		Check(err)
+		newHash, newName = ParseMetainfo(metainfo)
 		UploadTorrent(&metainfo, nil, &req, paused)
 	} else if req.Filename != nil {
 		path := *req.Filename
