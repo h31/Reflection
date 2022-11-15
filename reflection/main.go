@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Workiva/go-datastructures/bitarray"
 	"github.com/h31/Reflection/qBT"
 	"github.com/h31/Reflection/transmission"
 	"github.com/ricochet2200/go-disk-usage/du"
@@ -234,15 +233,13 @@ func qBTStateToTransmissionStatus(state string) int {
 }
 
 func MapPieceStates(dst JsonMap, pieces []byte) {
-	bits := bitarray.NewSparseBitArray()
+	serialized := make([]byte, (len(pieces) / 8) + 1)
 
 	for i, value := range pieces {
 		if value == 2 {
-			bits.SetBit(uint64(i))
+			serialized[i / 8] |= (0x80 >> (i % 8))
 		}
 	}
-
-	serialized, _ := bitarray.Marshal(bits)
 
 	dst["pieces"] = base64.StdEncoding.EncodeToString(serialized)
 }
